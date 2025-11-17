@@ -319,17 +319,17 @@
         FoldEngine.init(threeCanvas);
         FoldEngine.currentNet = currentProblem.net;
 
-        // ⭐ 2. 3D 뷰 초기화: 제거된 조각만 제외하고 5조각만 보이도록 처리
+        // ⭐ 3. 오른쪽 3D 전개도 복구: 제거된 조각만 제외하고 5조각만 보이도록 처리
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
         
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-            const removedId = window.UI.getRemovedFaceId(); // UI에서 결정된 removedId 가져오기
-            const removedFace = netFor3D.faces.find(f => f.id === removedId);
+            const removedId = window.UI.getRemovedFaceId(); 
+            const removedFaceIndex = netFor3D.faces.findIndex(f => f.id === removedId);
             
-            // 임시로 removedFace를 화면 바깥으로 이동 (3D 뷰에만 적용)
-            if (removedFace) {
-                removedFace.u = -100;
-                removedFace.v = -100;
+            // 임시로 removedFace를 배열에서 제거 (null로 설정)하여 FoldEngine이 로드하지 않도록 함
+            if (removedFaceIndex !== -1) {
+                netFor3D.faces[removedFaceIndex] = null;
+                netFor3D.faces = netFor3D.faces.filter(f => f !== null);
             }
         }
         
@@ -384,8 +384,6 @@
                             Overlap.startSelection(currentProblem.net);
                             UI.renderNet(currentProblem.net, {}); 
                         }
-                        
-                        // 전개도 완성하기 모드에서는 placed가 유지되고 3D 모델이 펼쳐짐
                     }
                 })
                 .catch(err => {

@@ -27,7 +27,6 @@
     // (A) Face 기본 검증
     // ----------------------------------------------------
     function validateFaces(net) {
-        // ... (생략: validateFaces 함수는 이전과 동일) ...
         if (!net || !Array.isArray(net.faces)) {
             return fail("전개도 데이터가 올바르지 않습니다.");
         }
@@ -56,7 +55,6 @@
     // 면의 4개 edge의 좌표 (정사각형이 아닌 w,h 반영)
     // ----------------------------------------------------
     function getEdges(f) {
-        // ... (생략: getEdges 함수는 이전과 동일) ...
         const { u, v, w, h } = f;
 
         return [
@@ -89,7 +87,6 @@
     // (B) adjacency 검사
     // ----------------------------------------------------
     function buildAdjacency(net) {
-        // ... (생략: buildAdjacency 함수는 이전과 동일) ...
         const adj = [...Array(6)].map(() => []);
         
         const faces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
@@ -117,6 +114,7 @@
             }
         }
 
+        // 연결 개수 = 5 여야 함
         let totalConnections = 0;
         adj.forEach(a => totalConnections += a.length);
         totalConnections = totalConnections / 2;
@@ -129,7 +127,6 @@
     }
 
     function checkConnectivity(adj) {
-        // ... (생략: checkConnectivity 함수는 이전과 동일) ...
         const facesIds = adj.map((a, id) => a.length > 0 ? id : -1).filter(id => id !== -1);
         if (facesIds.length === 0) return true; 
 
@@ -158,6 +155,7 @@
     // (C) FoldEngine 기반 실제 fold 테스트
     // ----------------------------------------------------
     function simulateFolding(net, adj) {
+        // 별도 가상 FoldEngine 인스턴스
         const dummyCanvas = document.createElement("canvas");
         dummyCanvas.width = 300;
         dummyCanvas.height = 300;
@@ -194,7 +192,6 @@
         if (groups.length <= 1) return true; 
 
         function buildTreeSim() {
-            // ... (생략: buildTreeSim 함수는 이전과 동일) ...
             const maxId = groups.reduce((max, g) => Math.max(max, g.faceId), -1);
             if (maxId < 0) return { parent: [], order: [] };
             
@@ -300,7 +297,6 @@
     // (D) overlap 검사
     // ----------------------------------------------------
     function checkOverlap() {
-        // ... (생략: checkOverlap 함수는 이전과 동일) ...
         if (!window.Overlap || !window.Overlap.noOverlapCheck) {
             console.warn("Overlap 모듈 없음 → 겹침 검사 생략");
             return true;

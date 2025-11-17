@@ -53,23 +53,23 @@
     // ① 제거된 face는 그리지 않는다
     for (const f of currentNet.faces) {
         if (f.id !== removedFaceId) {
-            drawFace(f, "#eaeaea");   // 정상 face만 그리기
+            drawFace(f, "#eaeaea");   // 원래 면
         }
     }
 
     // ② 후보 위치만 표시
     if (options.highlightPositions) {
         for (const c of candidatePositions) {
-            // 연한 테두리 or 배경
-            drawFaceOutline(c, "#999999");
+            drawFaceOutline(c, "#999");  // 회색 테두리
         }
     }
 
-    // ③ 사용자가 선택한 위치
+    // ③ 사용자가 클릭하여 배치한 위치
     if (placed) {
-        drawFaceOutline(placed, "#ffd966");
+        drawFaceOutline(placed, "#ffd966"); // 노란 강조
     }
 };
+
 
 
     // --------------------------------------

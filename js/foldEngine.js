@@ -75,8 +75,6 @@
     FoldEngine.loadNet = function (net) {
         // 리셋
         faceGroups = [];
-        // ⭐ 주의: 기존 scene의 자식 객체들을 모두 제거할 때 카메라와 라이트를 포함한 모든 객체를 제거해야 합니다.
-        // init에서 추가했던 카메라/라이트도 제거되므로, 아래에서 다시 추가해야 합니다.
         while (scene.children.length) scene.remove(scene.children[0]);
 
         // 카메라/빛 재추가
@@ -84,7 +82,7 @@
         light.position.set(4, 5, 6);
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        scene.add(camera); // 카메라를 scene에 다시 추가
+        scene.add(camera); 
 
         
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
@@ -127,7 +125,6 @@
             group.add(mesh);
             group.add(line);
             
-            // ⭐ 행렬 자동 업데이트 방지 (수동 업데이트로 통제)
             group.matrixAutoUpdate = false; 
 
             const faceCenterX = u + w/2;
@@ -140,7 +137,7 @@
             );
 
             group.position.copy(initialPos);
-            group.updateMatrix(); // 로컬 행렬만 업데이트
+            group.updateMatrix(); 
             group.userData.initialPos = initialPos;
             group.userData.netInfo = { w, h, u, v }; 
 
@@ -150,7 +147,6 @@
 
         faceGroups.sort((a, b) => a.faceId - b.faceId);
         
-        // ⭐ 오류 해결: load 직후 월드 행렬을 업데이트하여 foldAnimate 진입 시 안전하게 함
         scene.updateMatrixWorld(true);
 
         renderer.render(scene, camera);
@@ -165,9 +161,9 @@
                 group.position.copy(group.userData.initialPos);
             }
             group.setRotationFromEuler(new THREE.Euler(0, 0, 0)); 
-            group.updateMatrix(); // 로컬 행렬 업데이트
+            group.updateMatrix(); 
         });
-        scene.updateMatrixWorld(true); // 월드 행렬 업데이트
+        scene.updateMatrixWorld(true); 
         renderer.render(scene, camera);
     };
 
@@ -296,10 +292,9 @@
                 const progress = Math.min(1, elapsed / duration);
                 const angle = (Math.PI / 2) * progress; 
                 
-                // 1. 펼친 상태로 초기화 (로컬 및 월드 행렬 업데이트 포함)
+                // 1. 펼친 상태로 초기화
                 FoldEngine.unfoldImmediate(); 
                 
-                // ⭐ 오류 해결: 애니메이션 루프 시작 시 World Matrix 업데이트 보장
                 scene.updateMatrixWorld(true);
 
                 order.forEach(faceId => {
@@ -317,7 +312,7 @@
 
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
-                    // ⭐ 오류 해결: 부모 변환 후 자식 변환 직전에 월드 행렬 업데이트
+                    // ⭐ 최종 보강: 행렬 업데이트 순서를 명확히
                     parentGroup.updateMatrixWorld(true);
                     childGroup.updateMatrixWorld(true); 
 
@@ -331,7 +326,7 @@
                     childGroup.rotateOnAxis(localAxis, angle);
                     
                     childGroup.position.add(localPoint);
-                    childGroup.updateMatrix(); // 로컬 행렬 업데이트
+                    childGroup.updateMatrix(); 
                 });
 
                 renderer.render(scene, camera);

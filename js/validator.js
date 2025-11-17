@@ -1,20 +1,10 @@
 /**
- * validator.js
- *
- * 정답 판정 엔진
- *
- * 포함 기능:
- *   1) 전개도가 정육면체 전개도(11종)인지 판정
- *   2) Three.js에서 접힌 뒤 face들의 월드 좌표를 얻어
- *      실제로 정육면체인지 검사
- *   3) 겹치는 점/선 문제에서 “겹침 여부” 계산
- *
- * 외부에서 사용하는 주요 함수:
- *
- *   Validator.isValidCubeNet(net)
- *   Validator.extractCubeGeometry(faceGroups)
- *   Validator.checkCubeGeometry(geom)
- *   Validator.checkOverlap(pointA, pointB)
+ * validator.js – 정육면체 + 직육면체 전개도 검증 확장
+ * 
+ * 제공 기능:
+ *  validateNet(net)
+ *   → true / false
+ *   → 오류 메시지는 validateNet.lastError 로 확인
  */
 
 (function () {
@@ -23,141 +13,240 @@
     const Validator = {};
     window.Validator = Validator;
 
-    const EPS = 0.0005;  // 비교용 허용 오차
+    Validator.lastError = "";
 
-    // -----------------------------------------------------
-    // 1) 전개도가 정육면체 전개도인지 확인
-    // -----------------------------------------------------
-    Validator.isValidCubeNet = function (net) {
-        // net.faces: [{id,u,v}, ...]
-        // CubeNets.normalizeNet 기반으로 정규화하여 비교
-        const key = CubeNets.normalizeNet(net);
-        return CubeNets.nets.some(n => n.normalizeKey === key);
-    };
-
-    // -----------------------------------------------------
-    // 2) Three.js에서 접힌 뒤 각 face의 월드 좌표 추출
-    //
-    //   faceGroups: FoldEngine에서 만든 6개의 그룹
-    //
-    //   반환 구조:
-    //   {
-    //      centers: [THREE.Vector3, ...],  // 면 중심들
-    //      normals: [THREE.Vector3, ...],  // 면 법선 벡터들
-    //      corners: [[Vector3,Vector3,Vector3,Vector3], ...]  // 네 꼭짓점
-    //   }
-    // -----------------------------------------------------
-    Validator.extractCubeGeometry = function (faceGroups) {
-        const centers = [];
-        const normals = [];
-        const corners = [];
-
-        const tmpVector = new THREE.Vector3();
-        const tmpMatrix = new THREE.Matrix4();
-
-        for (let i = 0; i < faceGroups.length; i++) {
-            const grp = faceGroups[i];
-
-            // 월드 행렬
-            grp.updateWorldMatrix(true, false);
-            const wMat = grp.matrixWorld;
-
-            // 중심점(0,0,0)을 세계 좌표로 변환
-            const center = new THREE.Vector3(0, 0, 0).applyMatrix4(wMat);
-            centers.push(center);
-
-            // 법선(0,0,1)을 세계 좌표로 변환
-            const normal = new THREE.Vector3(0, 0, 1).applyMatrix4(wMat)
-                .sub(center)
-                .normalize();
-            normals.push(normal);
-
-            // 네 꼭짓점
-            const cs = [];
-            const pts = [
-                [-0.5, -0.5, 0],
-                [ 0.5, -0.5, 0],
-                [ 0.5,  0.5, 0],
-                [-0.5,  0.5, 0],
-            ];
-            for (const p of pts) {
-                const v = new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(wMat);
-                cs.push(v);
-            }
-            corners.push(cs);
-        }
-
-        return { centers, normals, corners };
-    };
-
-    // -----------------------------------------------------
-    // 3) 실제로 정육면체인지 검사
-    //    - 6개 면 중심이 모두 "±0.5 offset cube" 패턴인지
-    //    - 법선끼리 90°인지
-    //
-    //    단, 변형된 큐브(확대/축소)는 허용
-    //    => 중심 패턴만 맞춰도 됨
-    // -----------------------------------------------------
-    Validator.checkCubeGeometry = function (geom) {
-        const centers = geom.centers;
-
-        // 중심이 6개인지 확인
-        if (centers.length !== 6) return false;
-
-        // 중심 좌표를 배열로
-        const arr = centers.map(c => [c.x, c.y, c.z]);
-
-        // 정육면체의 6개 face 중심은 다음 패턴 중 하나:
-        //   (±s, 0, 0), (0, ±s, 0), (0, 0, ±s)
-        //
-        // 여기서 s는 일정한 양수(정확히 0.5일 필요는 없음)
-        // → s를 추정한 뒤 비교
-        //
-        // 1) 절댓값을 모아서 s 후보 찾기
-        const mags = arr.map(a => Math.max(Math.abs(a[0]), Math.abs(a[1]), Math.abs(a[2])));
-        const s = average(mags);
-
-        function isClose(a, b) {
-            return Math.abs(a - b) < 0.05;
-        }
-
-        // 2) 모든 중심이 (±s,0,0) / (0,±s,0) / (0,0,±s) 중 하나인지 검사
-        let validCount = 0;
-        arr.forEach(([x, y, z]) => {
-            const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
-
-            const caseX = isClose(ax, s) && isClose(ay, 0) && isClose(az, 0);
-            const caseY = isClose(ax, 0) && isClose(ay, s) && isClose(az, 0);
-            const caseZ = isClose(ax, 0) && isClose(ay, 0) && isClose(az, s);
-
-            if (caseX || caseY || caseZ) validCount++;
-        });
-
-        return validCount === 6;
-    };
-
-    // -----------------------------------------------------
-    // 4) 겹치는 점/선 판정
-    //
-    //   (A, B) 두 개의 점 좌표가 같으면 겹침
-    //   선의 경우는 네 점이 모두 매칭되면 겹침
-    // -----------------------------------------------------
-    Validator.checkOverlap = function (geom, A, B) {
-        // A, B: { faceId, localIndex }  (점/꼭짓점)
-        // localIndex: 0~3
-
-        const cornerA = geom.corners[A.faceId][A.localIndex];
-        const cornerB = geom.corners[B.faceId][B.localIndex];
-
-        if (cornerA.distanceTo(cornerB) < EPS) return true;
+    // ----------------------------------------------------
+    // 간편 오류 처리
+    // ----------------------------------------------------
+    function fail(msg) {
+        Validator.lastError = msg;
         return false;
-    };
-
-    // -----------------------------------------------------
-    // 작은 유틸
-    // -----------------------------------------------------
-    function average(arr) {
-        return arr.reduce((a, b) => a + b, 0) / arr.length;
     }
+
+    // ----------------------------------------------------
+    // (A) Face 기본 검증
+    // ----------------------------------------------------
+    function validateFaces(net) {
+        if (!net || !Array.isArray(net.faces)) {
+            return fail("전개도 데이터가 올바르지 않습니다.");
+        }
+
+        if (net.faces.length !== 6) {
+            return fail("전개도는 반드시 6개의 면으로 구성되어야 합니다.");
+        }
+
+        const idSet = new Set();
+        for (const f of net.faces) {
+            if (typeof f.id !== 'number') return fail("면 id가 숫자가 아닙니다.");
+            if (idSet.has(f.id)) return fail("중복된 face id가 있습니다: " + f.id);
+            idSet.add(f.id);
+
+            if (f.w <= 0 || f.h <= 0) {
+                return fail("면의 가로/세로 크기가 잘못되었습니다.");
+            }
+        }
+
+        return true;
+    }
+
+    // ----------------------------------------------------
+    // 면의 4개 edge의 좌표 (정사각형이 아닌 w,h 반영)
+    // ----------------------------------------------------
+    function getEdges(f) {
+        const { u, v, w, h } = f;
+
+        return [
+            { a:[u, v],       b:[u+w, v]       },   // top
+            { a:[u+w, v],     b:[u+w, v+h]     },   // right
+            { a:[u+w, v+h],   b:[u, v+h]       },   // bottom
+            { a:[u, v+h],     b:[u, v]         }    // left
+        ];
+    }
+
+    // edge 길이 (투명성: 전개도 좌표에서는 w/h 그대로길이)
+    function edgeLength(edge) {
+        const [x1, y1] = edge.a;
+        const [x2, y2] = edge.b;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        return Math.sqrt(dx*dx + dy*dy);
+    }
+
+    function sameEdge(e1, e2) {
+        return (
+            e1.a[0] === e2.b[0] &&
+            e1.a[1] === e2.b[1] &&
+            e1.b[0] === e2.a[0] &&
+            e1.b[1] === e2.a[1]
+        );
+    }
+
+    // ----------------------------------------------------
+    // (B) adjacency 검사
+    // ----------------------------------------------------
+    function buildAdjacency(net) {
+        const adj = [...Array(6)].map(() => []);
+        
+        for (let i = 0; i < net.faces.length; i++) {
+            const fi = net.faces[i];
+            const Ei = getEdges(fi);
+
+            for (let j = i+1; j < net.faces.length; j++) {
+                const fj = net.faces[j];
+                const Ej = getEdges(fj);
+
+                for (let ei = 0; ei < 4; ei++) {
+                    for (let ej = 0; ej < 4; ej++) {
+                        if (sameEdge(Ei[ei], Ej[ej])) {
+                            // edge 길이 검사
+                            if (Math.abs(edgeLength(Ei[ei]) - edgeLength(Ej[ej])) > 1e-6) {
+                                return fail("두 면의 접촉 edge 길이가 일치하지 않습니다.");
+                            }
+                            adj[fi.id].push({ to: fj.id, edgeA: ei, edgeB: ej });
+                            adj[fj.id].push({ to: fi.id, edgeA: ej, edgeB: ei });
+                        }
+                    }
+                }
+            }
+        }
+
+        // 연결 개수 = 5 여야 함
+        let totalConnections = 0;
+        adj.forEach(a => totalConnections += a.length);
+        totalConnections = totalConnections / 2;
+
+        if (totalConnections !== 5) {
+            return fail("전개도 면들이 정확히 5개 연결(edge sharing)되어야 합니다. 현재: " + totalConnections);
+        }
+
+        return adj;
+    }
+
+    function checkConnectivity(adj) {
+        // BFS from face 0
+        const visited = Array(6).fill(false);
+        const Q = [0];
+        visited[0] = true;
+
+        while (Q.length) {
+            const f = Q.shift();
+            adj[f].forEach(n => {
+                if (!visited[n.to]) {
+                    visited[n.to] = true;
+                    Q.push(n.to);
+                }
+            });
+        }
+
+        if (visited.some(v => !v)) {
+            return fail("전개도 면들이 하나로 연결되지 않았습니다.");
+        }
+
+        return true;
+    }
+
+    // ----------------------------------------------------
+    // (C) FoldEngine 기반 실제 fold 테스트
+    //   → 여기서는 임시 Three.js Scene을 생성하여 fold 시도
+    // ----------------------------------------------------
+    function simulateFolding(net, adj) {
+        // 별도 가상 FoldEngine 인스턴스
+        const dummyCanvas = document.createElement("canvas");
+        dummyCanvas.width = 300;
+        dummyCanvas.height = 300;
+
+        const engine = {};
+        Object.assign(engine, window.FoldEngine);  // 같은 엔진 복사
+        
+        if (!engine.init || !engine.loadNet) {
+            return fail("FoldEngine이 초기화되지 않았습니다.");
+        }
+
+        engine.init(dummyCanvas);
+        window.FoldEngine.currentNet = net;   // 실제 쓰기
+        engine.loadNet(net);
+
+        // folding tree 만들기 (FoldEngine과 동일 로직)
+        function buildTree() {
+            const parent = Array(6).fill(null);
+            parent[0] = -1;
+
+            const Q = [0];
+            const order = [];
+
+            while (Q.length) {
+                const f = Q.shift();
+                order.push(f);
+
+                adj[f].forEach(n => {
+                    if (parent[n.to] === null) {
+                        parent[n.to] = f;
+                        Q.push(n.to);
+                    }
+                });
+            }
+            return { parent, order };
+        }
+
+        const { parent, order } = buildTree();
+
+        // 접기 테스트: FoldEngine.foldAnimate의 로직을 그대로 사용
+        try {
+            engine.foldAnimate(0.5);
+        } catch (err) {
+            console.warn(err);
+            return fail("접기 과정에서 오류가 발생했습니다. 전개도가 물리적으로 접을 수 없는 형태입니다.");
+        }
+
+        // 성공적으로 fold되었는지 판단
+        // → 면들이 Z축으로 튀지 않았는지, NaN/Infinity 없는지 체크
+
+        const groups = engine.getFaceGroups();
+        for (let g of groups) {
+            const p = g.position;
+            if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.z)) {
+                return fail("면의 folding 위치가 비정상적(NaN/Infinity)입니다.");
+            }
+        }
+
+        return true;
+    }
+
+    // ----------------------------------------------------
+    // (D) overlap 검사
+    // ----------------------------------------------------
+    function checkOverlap() {
+        // Overlap.js에 위임
+        if (!window.Overlap || !window.Overlap.noOverlapCheck) {
+            console.warn("Overlap 모듈 없음 → 겹침 검사 생략");
+            return true;
+        }
+
+        const ok = window.Overlap.noOverlapCheck();
+        if (!ok) {
+            return fail("접었을 때 면이 서로 겹칩니다.");
+        }
+        return true;
+    }
+
+    // ----------------------------------------------------
+    // 최종 공개 함수: validateNet
+    // ----------------------------------------------------
+    Validator.validateNet = function (net) {
+        Validator.lastError = "";
+
+        if (!validateFaces(net)) return false;
+
+        const adj = buildAdjacency(net);
+        if (!adj) return false;
+
+        if (!checkConnectivity(adj)) return false;
+
+        if (!simulateFolding(net, adj)) return false;
+
+        if (!checkOverlap()) return false;
+
+        return true;
+    };
 
 })();

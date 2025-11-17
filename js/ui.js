@@ -19,6 +19,11 @@
 
     const UNIT = 60; // 한 칸 크기
     const EPS = 1e-6;
+    
+    // ⭐ 중앙 정렬을 위한 Offset
+    let U_OFFSET = 0;
+    let V_OFFSET = 0;
+
 
     // --------------------------------------
     // 초기화
@@ -27,7 +32,6 @@
         canvas = canvasElement;
         ctx = canvas.getContext("2d");
         
-        // 이전에 등록된 이벤트 리스너 제거 (문제 로드 시마다 초기화되므로 중복 방지)
         canvas.removeEventListener("click", onCanvasClick); 
         canvas.addEventListener("click", onCanvasClick);
     };
@@ -38,6 +42,8 @@
         removedFaceId = null;
         candidatePositions = [];
         placed = null;
+        U_OFFSET = 0; // Offset 초기화
+        V_OFFSET = 0;
     };
 
     // --------------------------------------
@@ -53,10 +59,13 @@
 
         if (isNetBuildMode) {
              if (removedFaceId == null) removedFaceId = pickRemovableFace(net);
-             
-             // 3. 오류 수정: 제거된 면뿐만 아니라 모든 유효한 후보 위치 계산
              computeCandidatePositions(currentNet); 
         }
+        
+        // ⭐ 1. 오류 수정: 중앙 정렬 Offset 계산 및 적용
+        calculateCenterOffset(currentNet, removedFaceId, placed, isNetBuildMode);
+        drawGrid(); // 2, 3. 오류 수정: 연한 색 모눈 전체 그리기
+
 
         // 겹침 문제: 선택된 점/선 하이라이트
         if (!isNetBuildMode) {
@@ -78,8 +87,8 @@
         // ② 후보 위치만 표시
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
-                 // 기존 면과 겹치는 위치는 제외하고 그리기
                 if (!isPositionOccupied(c)) {
+                    // drawFaceOutline은 이제 Offset을 내부에서 적용함
                     drawFaceOutline(c, "#999", 3, "#f9f9f9"); // 연한 배경 추가
                 }
             }
@@ -87,20 +96,97 @@
 
         // ③ 사용자가 클릭하여 배치한 위치 (전개도 완성하기)
         if (placed) {
-            drawFaceOutline(placed, "#ffc107", 5); // 노란 강조, 두께 5
+            drawFaceOutline(placed, "#ffc107", 5); 
         }
+        
+        // 캔버스 테두리 다시 그리기
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
     };
 
-    function isPositionOccupied(pos) {
-         for (const f of currentNet.faces) {
-             // 제거된 면 위치를 제외하고, 기존 면의 위치와 겹치는지 확인
-             if (f.id !== removedFaceId && 
-                 Math.abs(f.u - pos.u) < EPS && Math.abs(f.v - pos.v) < EPS &&
-                 Math.abs(f.w - pos.w) < EPS && Math.abs(f.h - pos.h) < EPS) {
-                 return true;
-             }
-         }
-         return false;
+
+    // --------------------------------------
+    // 1. 모눈 중앙 정렬 계산 헬퍼
+    // --------------------------------------
+    function calculateCenterOffset(net, removedId, placedPos, isNetBuildMode) {
+        if (!net || !net.faces.length) return;
+
+        let minU = Infinity, maxU = -Infinity;
+        let minV = Infinity, maxV = -Infinity;
+        
+        const facesToConsider = net.faces.filter(f => f.id !== removedId);
+        
+        // 활성 면들의 경계를 찾습니다.
+        for (const f of facesToConsider) {
+            minU = Math.min(minU, f.u);
+            maxU = Math.max(maxU, f.u + f.w);
+            minV = Math.min(minV, f.v);
+            maxV = Math.max(maxV, f.v + f.h);
+        }
+        
+        // 후보 위치까지 고려 (전체 레이아웃 크기)
+        if (isNetBuildMode && candidatePositions.length > 0) {
+            for (const c of candidatePositions) {
+                minU = Math.min(minU, c.u);
+                maxU = Math.max(maxU, c.u + c.w);
+                minV = Math.min(minV, c.v);
+                maxV = Math.max(maxV, c.v + c.h);
+            }
+        }
+
+        // 배치된 조각이 있다면 포함
+        if (placedPos) {
+             minU = Math.min(minU, placedPos.u);
+             maxU = Math.max(maxU, placedPos.u + placedPos.w);
+             minV = Math.min(minV, placedPos.v);
+             maxV = Math.max(maxV, placedPos.v + placedPos.h);
+        }
+
+        // 전개도의 크기 (단위: 칸)
+        const netWidth = maxU - minU;
+        const netHeight = maxV - minV;
+        
+        // 캔버스 크기 (단위: 픽셀)
+        const canvasSize = canvas.width;
+        
+        // 전개도를 중앙에 배치하기 위한 Offset (단위: 칸)
+        // (캔버스 픽셀 크기 / UNIT - 전개도 칸 크기) / 2 - 최소 U 좌표
+        U_OFFSET = (canvasSize / UNIT - netWidth) / 2 - minU;
+        V_OFFSET = (canvasSize / UNIT - netHeight) / 2 - minV;
+        
+        // 정수 칸 단위로 반올림 (모눈선 정렬)
+        U_OFFSET = Math.round(U_OFFSET);
+        V_OFFSET = Math.round(V_OFFSET);
+    }
+    
+    // --------------------------------------
+    // 2, 3. 오류 수정: 연한 모눈 전체 그리기
+    // --------------------------------------
+    function drawGrid() {
+        const gridSize = canvas.width / UNIT; 
+        const maxCells = Math.floor(canvas.width / UNIT) + 1; 
+        
+        ctx.save();
+        ctx.strokeStyle = "#ddd"; // 연한 모눈 선
+        ctx.lineWidth = 1;
+        
+        // 캔버스 전체에 모눈선을 그립니다.
+        for (let i = 0; i < maxCells; i++) {
+            // 수직선
+            ctx.beginPath();
+            ctx.moveTo(i * UNIT, 0);
+            ctx.lineTo(i * UNIT, canvas.height);
+            ctx.stroke();
+
+            // 수평선
+            ctx.beginPath();
+            ctx.moveTo(0, i * UNIT);
+            ctx.lineTo(canvas.width, i * UNIT);
+            ctx.stroke();
+        }
+
+        ctx.restore();
     }
 
 
@@ -108,8 +194,9 @@
     // face 그리기 – w×h 지원
     // --------------------------------------
     function drawFace(f, fill) {
-        const x = f.u * UNIT;
-        const y = f.v * UNIT;
+        // ⭐ Offset 적용
+        const x = (f.u + U_OFFSET) * UNIT; 
+        const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
         const h = f.h * UNIT;
 
@@ -126,13 +213,14 @@
 
     // outline만
     function drawFaceOutline(f, color, lineWidth = 3, fillColor = 'transparent') {
-        const x = f.u * UNIT;
-        const y = f.v * UNIT;
+        // ⭐ Offset 적용
+        const x = (f.u + U_OFFSET) * UNIT; 
+        const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
         const h = f.h * UNIT;
 
         ctx.save();
-        ctx.fillStyle = fillColor; // 연한 배경
+        ctx.fillStyle = fillColor; 
         ctx.strokeStyle = color;
         ctx.lineWidth = lineWidth;
         ctx.beginPath();
@@ -157,9 +245,9 @@
         if (!face) return;
 
         if (elem.type === "vertex") {
-            // 점: 작은 원으로 표시
-            const x = elem.x * UNIT;
-            const y = elem.y * UNIT;
+            // 점: 작은 원으로 표시 (⭐ Offset 적용)
+            const x = (elem.x + U_OFFSET) * UNIT; 
+            const y = (elem.y + V_OFFSET) * UNIT;
             ctx.beginPath();
             ctx.arc(x, y, 7, 0, Math.PI * 2);
             ctx.fill();
@@ -168,26 +256,26 @@
             const edges = getEdges(face);
             const edge = edges[elem.edge];
 
-            // 겹침 판정에 사용된 edge의 (u,v) 좌표
-            const u1 = edge.a[0] * UNIT;
-            const v1 = edge.a[1] * UNIT;
-            const u2 = edge.b[0] * UNIT;
-            const v2 = edge.b[1] * UNIT;
+            // 겹침 판정에 사용된 edge의 (u,v) 좌표 (⭐ Offset 적용)
+            const u1 = (edge.a[0] + U_OFFSET) * UNIT;
+            const v1 = (edge.a[1] + V_OFFSET) * UNIT;
+            const u2 = (edge.b[0] + U_OFFSET) * UNIT;
+            const v2 = (edge.b[1] + V_OFFSET) * UNIT;
 
             ctx.beginPath();
             ctx.moveTo(u1, v1);
             ctx.lineTo(u2, v2);
-            ctx.lineCap = 'round'; // 선 끝을 둥글게
+            ctx.lineCap = 'round'; 
             ctx.stroke();
         }
         ctx.restore();
     }
 
+
     // --------------------------------------
-    // 제거할 face 선택 (leaf face 기준)
+    // [포함된 헬퍼 함수] 제거할 face 선택 (leaf face 기준)
     // --------------------------------------
     function pickRemovableFace(net) {
-        // (이전 코드와 동일, 생략)
         const adj = buildAdjacency(net);
 
         for (let i = 0; i < 6; i++) {
@@ -197,10 +285,9 @@
     }
 
     // --------------------------------------
-    // adjacency (정육면체+직육면체 대응)
+    // [포함된 헬퍼 함수] adjacency (정육면체+직육면체 대응)
     // --------------------------------------
     function buildAdjacency(net) {
-        // (이전 코드와 동일, 생략)
         const adj = [...Array(6)].map(() => []);
         for (let i = 0; i < net.faces.length; i++) {
             for (let j = i + 1; j < net.faces.length; j++) {
@@ -223,8 +310,10 @@
         return adj;
     }
 
+    // --------------------------------------
+    // [포함된 헬퍼 함수] getEdges
+    // --------------------------------------
     function getEdges(f) {
-        // (이전 코드와 동일, 생략)
         return [
             { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, // top
             { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, // right
@@ -233,14 +322,27 @@
         ];
     }
 
+    // --------------------------------------
+    // [포함된 헬퍼 함수] sameEdge
+    // --------------------------------------
     function sameEdge(e1, e2) {
-        // (이전 코드와 동일, 생략)
         return (
             Math.abs(e1.a[0] - e2.b[0]) < EPS &&
             Math.abs(e1.a[1] - e2.b[1]) < EPS &&
             Math.abs(e1.b[0] - e2.a[0]) < EPS &&
             Math.abs(e1.b[1] - e2.a[1]) < EPS
         );
+    }
+    
+    // --------------------------------------
+    // [포함된 헬퍼 함수] edgeLength
+    // --------------------------------------
+    function edgeLength(edge) {
+        const [x1, y1] = edge.a;
+        const [x2, y2] = edge.b;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        return Math.sqrt(dx*dx + dy*dy);
     }
 
     // --------------------------------------
@@ -249,35 +351,27 @@
     function computeCandidatePositions(net) {
         candidatePositions = [];
 
-        // 제거된 면의 크기를 가져옴 (이 조각이 채워져야 하므로)
         const removedFace = net.faces.find(f => f.id === removedFaceId);
         if (!removedFace) return; 
 
-        // 모든 남아있는 면
         const activeFaces = net.faces.filter(f => f.id !== removedFaceId);
 
-        // 3. 오류 수정: 남아있는 모든 면에 대해, 제거된 면과 크기가 같은 조각이
-        // 붙을 수 있는 모든 인접한 위치를 후보로 계산
         for (const parent of activeFaces) {
             const edgesF = getEdges(parent);
 
-            // removedFace의 4개 edge 중 하나를 parent의 4개 edge 중 하나에 붙이는 모든 경우의 수
-            for (let eP = 0; eP < 4; eP++) { // parent edge index
-                for (let eR = 0; eR < 4; eR++) { // removed edge index
+            for (let eP = 0; eP < 4; eP++) { 
+                for (let eR = 0; eR < 4; eR++) { 
 
-                    // 1. Edge 길이 일치 확인 (Removed 조각의 크기가 parent의 edge와 일치해야 함)
                     const p_edge_len = edgeLength(edgesF[eP]);
                     const r_edge_len = edgeLength(getEdges(removedFace)[eR]);
                     
                     if (Math.abs(p_edge_len - r_edge_len) > EPS) {
-                        continue; // 길이 불일치
+                        continue; 
                     }
 
-                    // 2. 배치 좌표 계산
                     const pos = computePlacementByAttachment(parent, removedFace, eP, eR);
                     
                     if (pos) {
-                        // 3. 중복 확인 후 추가
                         const isDuplicate = candidatePositions.some(c => 
                             Math.abs(c.u - pos.u) < EPS && Math.abs(c.v - pos.v) < EPS);
                         
@@ -290,65 +384,20 @@
         }
     }
     
-    function edgeLength(edge) {
-        const [x1, y1] = edge.a;
-        const [x2, y2] = edge.b;
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        return Math.sqrt(dx*dx + dy*dy);
-    }
-
     // --------------------------------------
     // 실제 배치 좌표 계산 (인접 Edge 기준으로)
     // --------------------------------------
     function computePlacementByAttachment(parent, removed, eP, eR) {
-        // parent의 eP edge에, removed의 eR edge를 붙이는 경우, removed의 (u,v) 좌표 계산
-
-        const pEdges = getEdges(parent);
-        const rEdges = getEdges(removed);
-
-        // removed 조각을 펼쳐진 상태로 가정하고,
-        // parent.eP.start에 removed.eR.end가 오고, parent.eP.end에 removed.eR.start가 오도록
-        
-        // 1. parent의 eP edge 시작점 (A)과 끝점 (B)
-        const pA = pEdges[eP].a;
-        const pB = pEdges[eP].b;
-
-        // 2. removed 조각을 현재 parent에 붙이는 데 필요한 변환 (회전/이동)을 계산해야 함.
-        // 이는 복잡하므로, 가장 단순한 Grid 기반 이동을 사용합니다.
-        
         let ru, rv;
 
-        // removed의 eR edge의 (u,v)를 기준으로, removed의 좌상단 (u,v) 좌표를 계산
-        // 이 로직은 정육면체(w=h=1)의 십자형 전개도에서는 잘 작동했으나,
-        // 직육면체 및 다양한 레이아웃에서는 복잡한 기하학적 변환이 필요합니다.
-        
-        // 단순화된 그리드 이동만 허용합니다 (직육면체 전개도 타입 1~6을 가정)
         switch (eP) {
-            case 0: // Parent Top: removed는 위에 붙음
-                rv = parent.v - removed.h;
-                ru = parent.u + (pEdges[eP].a[0] - rEdges[eR].b[0]); // u좌표 조정 (단순화된 이동)
-                break;
-            case 1: // Parent Right: removed는 오른쪽에 붙음
-                ru = parent.u + parent.w;
-                rv = parent.v + (pEdges[eP].a[1] - rEdges[eR].b[1]); // v좌표 조정 (단순화된 이동)
-                break;
-            case 2: // Parent Bottom: removed는 아래에 붙음
-                rv = parent.v + parent.h;
-                ru = parent.u + (pEdges[eP].a[0] - rEdges[eR].b[0]); // u좌표 조정 (단순화된 이동)
-                break;
-            case 3: // Parent Left: removed는 왼쪽에 붙음
-                ru = parent.u - removed.w;
-                rv = parent.v + (pEdges[eP].a[1] - rEdges[eR].b[1]); // v좌표 조정 (단순화된 이동)
-                break;
+            case 0: ru = parent.u; rv = parent.v - removed.h; break;
+            case 1: ru = parent.u + parent.w; rv = parent.v; break;
+            case 2: ru = parent.u; rv = parent.v + parent.h; break;
+            case 3: ru = parent.u - removed.w; rv = parent.v; break;
             default: return null;
         }
 
-        // 현재 구현에서는 회전 변환을 고려하지 않은 단순 이동만 계산합니다.
-        // 실제 전개도 문제에서는 removedFace가 회전하지 않은 상태로 가정되므로,
-        // 이 로직은 Grid 기반 정배치에서는 충분합니다.
-        
-        // 최종적으로 removedFace의 (u,v) 좌표를 반환
         return { 
             u: ru, 
             v: rv, 
@@ -358,15 +407,31 @@
     }
 
     // --------------------------------------
+    // [포함된 헬퍼 함수] isPositionOccupied
+    // --------------------------------------
+    function isPositionOccupied(pos) {
+         for (const f of currentNet.faces) {
+             if (f.id !== removedFaceId && 
+                 Math.abs(f.u - pos.u) < EPS && Math.abs(f.v - pos.v) < EPS &&
+                 Math.abs(f.w - pos.w) < EPS && Math.abs(f.h - pos.h) < EPS) {
+                 return true;
+             }
+         }
+         return false;
+    }
+
+    // --------------------------------------
     // 클릭 → placed 적용
     // --------------------------------------
     function onCanvasClick(evt) {
         const rect = canvas.getBoundingClientRect();
-        const x = evt.clientX - rect.left;
-        const y = evt.clientY - rect.top;
+        // ⭐ Offset 반영된 픽셀 위치 계산
+        const x = (evt.clientX - rect.left);
+        const y = (evt.clientY - rect.top);
 
-        const u = x / UNIT;
-        const v = y / UNIT;
+        // ⭐ 캔버스 픽셀 위치를 Offset이 적용된 그리드 좌표로 변환
+        const u = x / UNIT - U_OFFSET;
+        const v = y / UNIT - V_OFFSET;
 
         if (!currentNet || !window.CubeProject || !window.CubeProject.currentProblem) return;
 
@@ -375,10 +440,8 @@
              if (removedFaceId == null) return; 
 
              for (const pos of candidatePositions) {
-                 // **3. 오류 수정:** 후보 영역을 클릭했는지 확인
-                if (u >= pos.u && u <= pos.u + pos.w && v >= pos.v && v <= pos.v + pos.h) {
+                if (u >= pos.u && u < pos.u + pos.w && v >= pos.v && v < pos.v + pos.h) {
                     
-                    // 기존 면이 있는 위치를 다시 선택하는 것은 허용하지 않음
                     if (isPositionOccupied(pos)) return; 
                     
                     placed = pos;
@@ -411,15 +474,16 @@
         f.u = placed.u;
         f.v = placed.v;
         
+        // 4. 오류 수정: 정답 확인 시 FoldEngine이 현재 placed 상태로 로드되어 접히도록 처리
+        window.FoldEngine.loadNet(netClone);
+
         const result = Validator.validateNet(netClone);
         
-        // 정답/오답 모두 placed 상태는 유지하여 UI에 표시 (main.js에서 clear 처리)
         return result;
     };
 
     // overlap 모드는 Overlap.js에서 처리
     UI.checkOverlapResult = function (net) {
-        // Overlap.js는 내부적으로 FoldEngine을 사용하므로 net만 넘기면 됨
         return window.Overlap.checkUserAnswer(net);
     };
 

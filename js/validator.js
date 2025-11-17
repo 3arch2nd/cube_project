@@ -66,7 +66,6 @@
             return fail(`전개도는 반드시 6개의 면으로 구성되어야 합니다. 현재 유효 면 개수: ${validFaces.length}`);
         }
         
-        // ... (ID 중복 체크 등 생략) ...
         const idSet = new Set();
         for (const f of validFaces) {
             if (typeof f.id !== 'number') return fail("면 id가 숫자가 아닙니다.");
@@ -174,8 +173,8 @@
         
         const engine = window.FoldEngine;
         
-        if (!engine.init || !engine.loadNet || !engine.getFaceGroups) {
-            return fail("FoldEngine 모듈이 올바르지 않습니다.");
+        if (!engine.init || !engine.loadNet || !engine.getFaceGroups || !engine.scene) {
+            return fail("FoldEngine 모듈이 올바르지 않거나 초기화되지 않았습니다.");
         }
         
         // 1. FoldEngine 초기화 및 로드 
@@ -188,7 +187,6 @@
         // 2. Folding Tree 생성
         function buildTreeSim() {
             const parent = Array(adj.length).fill(null);
-            // groups가 정렬되어 있으므로 첫 번째를 루트로 사용
             const rootId = groups[0].faceId; 
             parent[rootId] = -1;
 
@@ -201,7 +199,6 @@
                 
                 if (adj[f]) {
                      adj[f].forEach(n => {
-                        // n.to가 현재 그룹 목록에 있는지 확인
                         if (parent[n.to] === null && groups.some(g => g.faceId === n.to)) { 
                             parent[n.to] = f;
                             Q.push(n.to);
@@ -236,27 +233,28 @@
                 group.updateMatrix(); 
             });
 
-            engine.scene.updateMatrixWorld(true);
+            // ⭐ 수정: 여기서 다시 한번 월드 행렬을 강제 업데이트하여 안정성 확보
+            // FoldEngine.loadNet에서 이미 호출되었지만, 안전을 위해 다시 호출
+            engine.scene.updateMatrixWorld(true); 
             
             const angle = Math.PI / 2; // 완전히 접힘
 
             order.forEach(faceId => {
                 const p = parent[faceId];
-                if (p === -1) return; // 루트 노드 건너뛰기
+                if (p === -1) return; 
 
                 const parentGroup = groups.find(g => g.faceId === p);
                 const childGroup = groups.find(g => g.faceId === faceId);
                 
-                // ⭐ 핵심 수정: 그룹이 없으면 다음 루프로 이동 (Uncaught TypeError 방지)
-                if (!parentGroup || !childGroup) return;
+                // ⭐ 핵심 안정성 체크: 그룹이 없으면 다음 루프로 이동
+                if (!parentGroup || !childGroup) return; 
 
                 const relation = adj[p].find(x => x.to === faceId);
-                if (!relation) return; // 관계 정보가 없으면 건너뛰기
+                if (!relation) return;
                 
                 const parentFaceObj = faces.find(f => f.id === p);
                 if (!parentFaceObj) return;
 
-                // getAxisAndPointSim을 루프 밖 헬퍼로 사용
                 const { axis, point } = getAxisAndPointSim(parentFaceObj, relation);
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
@@ -284,7 +282,7 @@
 
         } catch (err) {
             console.warn("Validator Simulate Fold Error:", err);
-            return fail("접기 시뮬레이션 중 오류가 발생했습니다: " + err.message);
+            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. 그룹 객체가 'undefined'일 가능성.`);
         }
 
         // 성공적으로 fold되었는지 판단
@@ -297,9 +295,9 @@
 
         return true;
     }
-
+    
     // ----------------------------------------------------
-    // (D) overlap 검사 및 최종 공개 함수 생략 (변경 없음)
+    // (D) overlap 검사
     // ----------------------------------------------------
     function checkOverlap() {
         if (!window.Overlap || !window.Overlap.noOverlapCheck) {
@@ -317,6 +315,9 @@
         return true;
     }
 
+    // ----------------------------------------------------
+    // 최종 공개 함수: validateNet
+    // ----------------------------------------------------
     Validator.validateNet = function (net) {
         Validator.lastError = "";
 

@@ -305,6 +305,9 @@
     FoldEngine.currentNet = currentProblem.net;
     FoldEngine.loadNet(currentProblem.net);
     FoldEngine.unfoldImmediate();
+        setTimeout(() => {
+    FoldEngine.foldAnimate(1);  // 1초 동안 접기
+}, 300);
 
     // 겹침 모드라면 Overlap 초기화
     if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {

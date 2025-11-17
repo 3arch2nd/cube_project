@@ -180,7 +180,7 @@
     // --------------------------------------
     // face 그리기 – w×h 지원
     // --------------------------------------
-    function drawFace(f, fill, outerStroke = "#333", innerStroke = "#333") { // ⭐ 내부 선 인자 추가
+    function drawFace(f, fill, outerStroke = "#333", innerStroke = "#aaa") { // ⭐ innerStroke 기본값 변경
         const x = (f.u + U_OFFSET) * UNIT; 
         const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
@@ -189,23 +189,28 @@
         ctx.save();
         ctx.fillStyle = fill;
         
-        // 1. 내부 선 그리기 (테두리 제외)
+        // 먼저 내부 선 그리기 (연하고 얇게)
         ctx.strokeStyle = innerStroke; 
-        ctx.lineWidth = 1; // 내부 선은 얇게
+        ctx.lineWidth = 1; 
         ctx.beginPath();
-        if (f.w > 0) {
-            ctx.moveTo(x + w, y);
-            ctx.lineTo(x + w, y + h);
-        }
-        if (f.h > 0) {
-            ctx.moveTo(x, y + h);
-            ctx.lineTo(x + w, y + h);
+        // 가로 내부 선
+        if (f.h > 0 && f.w > 0) { // 사각형일 경우
+             // 가로줄 그리기 (위, 아래 경계선은 테두리 담당이므로 제외)
+             for(let i = 1; i < f.h; i++) {
+                ctx.moveTo(x, y + i * UNIT);
+                ctx.lineTo(x + w, y + i * UNIT);
+             }
+             // 세로줄 그리기 (좌, 우 경계선은 테두리 담당이므로 제외)
+             for(let i = 1; i < f.w; i++) {
+                ctx.moveTo(x + i * UNIT, y);
+                ctx.lineTo(x + i * UNIT, y + h);
+             }
         }
         ctx.stroke();
 
-        // 2. 테두리 그리기 (전체 면의 외곽)
+        // 그 다음 테두리 그리기 (진하고 굵게)
         ctx.strokeStyle = outerStroke; 
-        ctx.lineWidth = 2; // 테두리는 굵게
+        ctx.lineWidth = 2; 
         ctx.beginPath();
         ctx.rect(x, y, w, h);
         ctx.fill();
@@ -320,6 +325,10 @@
     // [포함된 헬퍼 함수] getEdges
     // --------------------------------------
     function getEdges(f) {
+        // ⭐ 면이 유효한지 확인
+        if (!f || f.w === undefined || f.h === undefined) {
+            return [];
+        }
         return [
             { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, // top
             { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, // right
@@ -469,14 +478,32 @@
     // 정답 판정 (validator 연결)
     // --------------------------------------
     UI.checkPieceResult = function (net) {
-        if (!placed) return false;
+        if (!placed) {
+            Validator.lastError = "조각이 배치되지 않았습니다.";
+            return false;
+        }
 
         const netClone = JSON.parse(JSON.stringify(net));
         const f = netClone.faces.find(f => f.id === removedFaceId);
         
         // placed 위치를 복제본에 적용
-        f.u = placed.u;
-        f.v = placed.v;
+        if (f) {
+            f.u = placed.u;
+            f.v = placed.v;
+            f.w = placed.w; // w, h도 업데이트 필요
+            f.h = placed.h;
+        } else {
+             // removedFaceId에 해당하는 면이 없으면 (예외 상황)
+             // placed 정보를 바탕으로 새로운 면을 추가
+             netClone.faces.push({
+                 id: removedFaceId,
+                 u: placed.u,
+                 v: placed.v,
+                 w: placed.w,
+                 h: placed.h
+             });
+             netClone.faces.sort((a,b) => a.id - b.id); // ID 순으로 정렬
+        }
         
         // 2. 오류 수정: 정답 확인 시, 정답을 포함한 완전한 netClone을 로드
         window.FoldEngine.loadNet(netClone);

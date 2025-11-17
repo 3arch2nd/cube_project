@@ -1,418 +1,275 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" 
-          content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
-    
-    <title>입체도형 전개도 완전 정복</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-    <!-- OpenGraph -->
-    <meta property="og:title" content="입체도형 전개도 완전 정복">
-    <meta property="og:description" content="전개도 문제, 조각 배치, 겹치는 점/선 문제를 연습해보세요!">
-    <meta property="og:image" content="https://i.imgur.com/XT0OsoI.png">
-    <meta property="og:url" content="https://your-domain-or-github.io/cube_project/">
+    <title>입체도형 완전 정복</title>
+    <meta property="og:title" content="입체도형 완전 정복">
+    <meta property="og:description" content="전개도 완성하기 / 겹쳐지는 부분 찾기 문제 자동 생성">
+    <meta property="og:url" content="https://cube.3arch2nd.site">
     <meta property="og:type" content="website">
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" 
-          rel="stylesheet" />
+    <!-- 폰트 -->
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
 
-    <!-- Three.js (CDN) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+    <!-- QRCode 생성 스크립트 -->
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
     <style>
-    /* ===== 공통 기본 스타일 ===== */
+        body {
+            margin: 0;
+            font-family: 'Gowun Dodum', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            text-align: center;
+        }
 
-    body {
-        font-family: 'Gowun Dodum', sans-serif;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        margin: 0;
-        background-color: #f4f7f6;
-        color: #333;
-        text-align: center;
-    }
+        h1 {
+            margin-top: 30px;
+            color: #4b8134;
+        }
 
-    .container {
-        position: relative;
-        background-color: white;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-        width: 90%;
-        max-width: 760px;
-        margin: 20px auto;
-        box-sizing: border-box;
-    }
+        .container {
+            width: 90%;
+            max-width: 900px;
+            margin: 20px auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }
 
-    h1 { color: #4b8134; margin-bottom: 20px; font-size: 2em; }
-    h2 { margin-bottom: 5px; }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+            font-family: inherit;
+        }
 
-    small {
-        display: block;
-        font-size: 18px;
-        color: #6c757d;
-        margin-bottom: 20px;
-        line-height: 1.5;
-    }
+        .green-btn { background:#92c572; color:white; }
+        .gray-btn { background:#e5e5e5; }
+        .orange-btn { background:#ffc457; }
+        .red-btn { background:#dd6666; color:white; }
 
-    button {
-        font-family: inherit;
-        padding: 10px 20px;
-        margin: 5px;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 16px;
-        transition: background-color .3s, transform .1s;
-    }
+        button.selected {
+            background:#ffc107 !important;
+            color:#333 !important;
+            font-weight:bold;
+        }
 
-    button:hover { transform: translateY(-1px); }
+        /* 설정 페이지 */
+        .section {
+            margin-top:20px;
+            padding:20px;
+            border-radius:12px;
+            background:#fafafa;
+            border:1px solid #ddd;
+            text-align:center;
+        }
 
-    .primary-btn {
-        background-color: #a0c179;
-        color: white;
-    }
-    .primary-btn:hover {
-        background-color: #8cb24b;
-    }
+        .option-row {
+            display:flex;
+            justify-content:center;
+            flex-wrap:wrap;
+            gap:10px;
+            margin-top:10px;
+        }
 
-    .secondary-btn {
-        background-color: #e9e9e9;
-        color: #333;
-    }
-    .secondary-btn:hover {
-        background-color: #d9d9d9;
-    }
+        .hidden { display:none; }
 
-    /* QR 버튼 */
-    #qr-code-btn {
-        position: absolute;
-        top: 15px;
-        right: 15px;
-        padding: 5px 10px;
-        font-size: 14px;
-    }
+        /* 문제 페이지 */
+        #problem-page.hidden, 
+        #result-page.hidden {
+            display:none;
+        }
 
-    /* ======================
-        페이지별 display 제어
-    ====================== */
-    #mode-selection-page,
-    #setup-page,
-    #problem-page,
-    #final-result-page {
-        display: none;
-    }
+        #net-canvas {
+            width:350px;
+            height:350px;
+            background:white;
+            border:2px solid #333;
+            margin: 20px auto;
+        }
 
-    /* ========== 모드 선택 페이지 ========== */
+        #three-view {
+            width:350px;
+            height:350px;
+            background:#000;
+            margin:20px auto;
+        }
 
-    .mode-buttons {
-        display: flex;
-        gap: 20px;
-        margin-top: 20px;
-        justify-content: center;
-        width: 100%;
-    }
+        /* QR 팝업 */
+        #qr-popup {
+            position:fixed;
+            left:0; top:0;
+            width:100%;
+            height:100%;
+            display:none;
+            align-items:center;
+            justify-content:center;
+            background:rgba(0,0,0,0.5);
+            z-index:1000;
+        }
+        #qr-box {
+            background:white;
+            padding:30px;
+            border-radius:12px;
+            text-align:center;
+        }
 
-    .mode-option {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-    }
-
-    /* ========== Three.js 영역 ========== */
-
-    .canvas-wrapper {
-        width: 100%;
-        height: 420px;
-        margin: 0 auto 15px;
-        border: 2px solid #333;
-        border-radius: 10px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    #three-view {
-        width: 100%;
-        height: 100%;
-        display: block;
-    }
-
-    /* ========== 풀이 아래 버튼들 ========== */
-    .problem-footer {
-        margin-top: 20px;
-        display: flex;
-        justify-content: center;
-    }
-
-    /* ========== 팝업 ========== */
-    .popup-overlay {
-        position: fixed;
-        top:0; left:0;
-        width:100%; height:100%;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        background-color:rgba(255,255,255,0.8);
-        z-index:100;
-    }
-
-    .popup-box {
-        background-color:white;
-        padding:30px;
-        border-radius:12px;
-        box-shadow:0 4px 15px rgba(0,0,0,0.2);
-        max-width:450px;
-        width:80%;
-        text-align:center;
-    }
-
-    .popup-box .close-btn {
-        position:absolute;
-        top:10px; right:15px;
-        font-size:26px; 
-        cursor:pointer;
-        background:none;
-        border:none;
-    }
-
-    /* 모바일 대응 */
-    @media (max-width: 480px){
-        h1 { font-size: 1.6em; }
-        .container { padding: 20px; }
-        .canvas-wrapper { height: 300px; }
-    }
     </style>
 </head>
 
 <body>
 
-<div class="container">
+    <h1>입체도형 완전 정복</h1>
 
-    <!-- QR 버튼 -->
-    <button id="qr-code-btn" class="secondary-btn">QR 코드</button>
+    <!-- QR -->
+    <button id="qr-btn" class="gray-btn" style="position:fixed; top:20px; right:20px;">
+        QR 코드
+    </button>
 
-    <!-- ========== ① 모드 선택 페이지 ========== -->
-    <div id="mode-selection-page">
-        <h1>입체도형 완전 정복</h1>
-        <h2>모드를 선택하세요</h2>
+    <!-- 메인 컨테이너 -->
+    <div class="container">
 
-        <div class="mode-buttons">
+        <!-- ========== 1. 모드 선택 페이지 ========== -->
+        <div id="mode-select-page">
 
-            <div class="mode-option">
-                <button id="classic-mode-btn" class="primary-btn">🎓 클래식 모드</button>
-                <small>원하는 만큼 문제를 풀며 실력을 쌓아요!</small>
-            </div>
+            <h2>학습 모드를 선택하세요.</h2>
 
-            <div class="mode-option">
-                <button id="time-attack-mode-btn" class="primary-btn"
-                        style="background:#e06666">⏱ 타임어택</button>
-                <small>정해진 시간 동안 빠르게 풀기!</small>
+            <div class="option-row">
+                <button class="green-btn" id="btn-mode-net">🧩 전개도 완성하기</button>
+                <button class="orange-btn" id="btn-mode-overlap">🎯 겹쳐지는 부분 찾기</button>
             </div>
 
         </div>
-    </div>
 
-    <!-- ========== ② 설정 페이지 ========== -->
-    <div id="setup-page">
 
-        <button id="back-to-mode-select-btn"
-                class="home-button secondary-btn"
-                style="position:absolute;top:20px;left:20px;">
-            모드 선택으로
-        </button>
+        <!-- ========== 2-A. 전개도 완성하기 설정 ========== -->
+        <div id="setup-net" class="hidden">
 
-        <h1>입체도형 완전 정복</h1>
-        <h2>문제 유형 및 설정</h2>
+            <h2>전개도 완성하기 - 설정</h2>
 
-        <div class="main-layout">
-
-            <!-- 왼쪽 패널: 문제 유형 & 난이도 -->
-            <div class="left-panel">
-
-                <!-- 문제 유형 -->
-                <div class="setting-group">
-                    <h3>문제 유형 선택</h3>
-                    <div class="option-buttons" id="type-select">
-                        <button data-type="net" class="selected">전개도</button>
-                        <button data-type="overlap">겹치는 점/선</button>
-                        <button data-type="both">둘 다</button>
-                    </div>
+            <!-- 입체 종류 -->
+            <div class="section">
+                <h3>입체 종류</h3>
+                <div class="option-row" id="net-type-group">
+                    <button data-type="cube" class="gray-btn">정육면체</button>
+                    <button data-type="rect" class="gray-btn">직육면체</button>
+                    <button data-type="both" class="gray-btn">둘 다</button>
                 </div>
-
-                <!-- 난이도 -->
-                <div class="setting-group">
-                    <h3>난이도 선택</h3>
-                    <div class="option-buttons" id="difficulty-select">
-                        <button data-difficulty="practice">연습</button>
-                        <button data-difficulty="1" class="selected">★</button>
-                        <button data-difficulty="2">★★</button>
-                    </div>
-                </div>
-
             </div>
 
-            <!-- 오른쪽: 문제 수 or 시간 설정 -->
-            <div class="right-panel">
-
-                <div class="settings-wrapper">
-
-                    <div id="classic-settings">
-                        <div class="setting-group">
-                            <h3>문제 개수</h3>
-                            <div id="quantity-control">
-                                <button id="quantity-minus">-</button>
-                                <span id="problem-quantity" class="quantity-display">5</span>
-                                <button id="quantity-plus">+</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="time-attack-settings" style="display:none;">
-                        <div class="setting-group">
-                            <h3>도전 시간</h3>
-                            <div id="time-control">
-                                <button id="time-minus">&lt;</button>
-                                <span id="time-limit-display" class="quantity-display">
-                                    3분
-                                </span>
-                                <button id="time-plus">&gt;</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="settings-overlay" style="display:none;"></div>
-
+            <!-- 진행 방식 -->
+            <div class="section">
+                <h3>진행 방식</h3>
+                <div class="option-row" id="net-run-group">
+                    <button data-run="practice" class="gray-btn">연습</button>
+                    <button data-run="real" class="gray-btn">실전</button>
                 </div>
-
-                <div class="setting-group start-btn-container">
-                    <button id="start-quiz-btn" class="primary-btn">시작!</button>
-                </div>
-
             </div>
+
+            <!-- 문제 개수 -->
+            <div class="section">
+                <h3>문제 개수</h3>
+                <div class="option-row">
+                    <button class="gray-btn" id="net-q-minus">-</button>
+                    <span id="net-q-display" style="font-size:22px; margin:0 10px;">10</span>
+                    <button class="gray-btn" id="net-q-plus">+</button>
+                </div>
+            </div>
+
+            <button id="start-net" class="green-btn" style="margin-top:20px;">문제 시작하기</button>
         </div>
 
-    </div>
-    <!-- ========== ③ 문제 풀이 페이지 ========== -->
-    <div id="problem-page">
 
-        <!-- Navigation to settings -->
-        <button id="back-to-settings-btn"
-                class="home-button secondary-btn"
-                style="position:absolute;top:20px;left:20px;">
-            설정으로
-        </button>
+        <!-- ========== 2-B. 겹쳐지는 부분 찾기 설정 ========== -->
+        <div id="setup-overlap" class="hidden">
 
-        <h1>문제 풀이</h1>
+            <h2>겹쳐지는 부분 찾기 - 설정</h2>
 
-        <div id="problem-info">
-            <h2 id="problem-type-label">전개도 문제</h2>
-            <small id="problem-counter-label">(1 / n)</small>
+            <!-- 유형 -->
+            <div class="section">
+                <h3>유형 선택</h3>
+                <div class="option-row" id="ov-type-group">
+                    <button data-type="point" class="gray-btn">점</button>
+                    <button data-type="edge" class="gray-btn">선분</button>
+                    <button data-type="both" class="gray-btn">둘 다</button>
+                </div>
+            </div>
+
+            <!-- 진행 방식 -->
+            <div class="section">
+                <h3>진행 방식</h3>
+                <div class="option-row" id="ov-run-group">
+                    <button data-run="practice" class="gray-btn">연습</button>
+                    <button data-run="real" class="gray-btn">실전</button>
+                </div>
+            </div>
+
+            <!-- 문제 개수 -->
+            <div class="section">
+                <h3>문제 개수</h3>
+                <div class="option-row">
+                    <button class="gray-btn" id="ov-q-minus">-</button>
+                    <span id="ov-q-display" style="font-size:22px; margin:0 10px;">10</span>
+                    <button class="gray-btn" id="ov-q-plus">+</button>
+                </div>
+            </div>
+
+            <button id="start-overlap" class="orange-btn" style="margin-top:20px;">문제 시작하기</button>
+
         </div>
 
-        <p id="problem-instruction">
-            전개도를 보고 빈 조각을 알맞은 위치에 배치해보세요.
-        </p>
 
-        <!-- Three.js 렌더링 영역 -->
-        <div class="canvas-wrapper">
-            <canvas id="three-view"></canvas>
+        <!-- ========== 3. 문제 페이지 ========== -->
+        <div id="problem-page" class="hidden">
+
+            <h2 id="problem-title">문제</h2>
+
+            <canvas id="net-canvas" width="350" height="350"></canvas>
+            <canvas id="three-view" width="350" height="350"></canvas>
+
+            <div class="option-row" style="margin-top:20px;">
+                <button id="btn-check" class="green-btn">정답 확인</button>
+                <button id="btn-next" class="orange-btn hidden">다음 문제</button>
+                <button id="btn-exit" class="red-btn">종료</button>
+            </div>
+
         </div>
 
-        <!-- 풀이 하단 버튼 -->
-        <div class="problem-footer">
-            <button id="check-answer-btn" class="primary-btn">
-                정답 확인
+
+        <!-- ========== 4. 결과 페이지 ========== -->
+        <div id="result-page" class="hidden">
+
+            <h2>학습 결과</h2>
+            <p>정답률: <span id="result-acc"></span></p>
+
+            <button id="btn-restart" class="green-btn" style="margin-top:20px;">
+                처음으로 돌아가기
             </button>
+
         </div>
 
-        <!-- 풀이 정보 -->
-        <div id="problem-progress"
-             style="margin-top:15px;color:#666;font-size:16px;">
-            <span id="timer-display"></span>
+    </div>
+
+
+    <!-- ========= QR Pop-up ========= -->
+    <div id="qr-popup">
+        <div id="qr-box">
+            <h3>QR 코드</h3>
+            <div id="qr-holder" style="margin-top:15px;"></div>
+
+            <button id="qr-close" class="gray-btn" style="margin-top:20px;">닫기</button>
         </div>
     </div>
 
 
-    <!-- ========== ④ 최종 결과 페이지 ========== -->
-    <div id="final-result-page">
-
-        <h1>도전 결과</h1>
-
-        <div id="final-score-box" class="score-box">
-            <h2>정답률</h2>
-            <p id="score-summary" style="font-size:22px;font-weight:bold;">
-                -
-            </p>
-
-            <h3>평균 풀이 시간</h3>
-            <p id="average-time-label">-</p>
-        </div>
-
-        <div class="button-row" style="margin-top:30px;">
-            <button id="register-record-btn" class="primary-btn">명예의 전당 등록</button>
-            <button id="go-home-btn" class="secondary-btn">처음으로</button>
-        </div>
-    </div>
-
-
-</div> <!-- container 끝 -->
-
-
-<!-- ========== ⑤ QR 팝업 ========== -->
-<div id="qr-popup" class="popup-overlay" style="display:none;">
-    <div class="popup-box" style="position:relative;">
-        <button id="close-qr-btn" class="close-btn">&times;</button>
-        <h2>QR 코드</h2>
-        <div id="qr-holder" style="margin-top:15px;"></div>
-    </div>
-</div>
-
-<!-- ========== ⑥ 명예의전당 기록 팝업(향후 GAS 연동) ========== -->
-<div id="record-popup" class="popup-overlay" style="display:none;">
-    <div class="popup-box" style="position:relative;">
-        <button id="close-record-popup-btn" class="close-btn">&times;</button>
-
-        <h2>명예의 전당 등록</h2>
-        <p>이름을 입력하세요</p>
-
-        <input id="record-name-input"
-               type="text"
-               placeholder="예: 홍길동"
-               style="width:80%;padding:10px;border-radius:8px;border:1px solid #ccc;font-size:16px;">
-
-        <div class="button-row" style="margin-top:20px;">
-            <button id="send-record-btn" class="primary-btn">등록</button>
-        </div>
-    </div>
-</div>
-
-<!-- ========== ⑦ Three.js·전개도·애니메이션 JS 연결 ========== -->
-
-<!-- 문제 생성용 전개도 11종 -->
-<script src="js/cube_nets.js"></script>
-
-<!-- Three.js 접힘 엔진 -->
-<script src="js/foldEngine.js"></script>
-
-<!-- 정답 판정(접으면 큐브 되는지, 점/선 겹침 판정) -->
-<script src="js/validator.js"></script>
-
-<!-- 점/선 겹침 문제 전용 -->
-<script src="js/overlap.js"></script>
-
-<!-- UI 처리 (전개도 표시, 후보 위치 표시, 클릭 인터랙션) -->
-<script src="js/ui.js"></script>
-
-<!-- 앱 전체 흐름 컨트롤 -->
-<script src="js/main.js"></script>
-
+    <!-- ====== main.js 연결 ====== -->
+    <script src="main.js"></script>
 </body>
 </html>

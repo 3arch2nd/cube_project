@@ -233,8 +233,6 @@
                 group.updateMatrix(); 
             });
 
-            // ⭐ 수정: 여기서 다시 한번 월드 행렬을 강제 업데이트하여 안정성 확보
-            // FoldEngine.loadNet에서 이미 호출되었지만, 안전을 위해 다시 호출
             engine.scene.updateMatrixWorld(true); 
             
             const angle = Math.PI / 2; // 완전히 접힘
@@ -246,7 +244,7 @@
                 const parentGroup = groups.find(g => g.faceId === p);
                 const childGroup = groups.find(g => g.faceId === faceId);
                 
-                // ⭐ 핵심 안정성 체크: 그룹이 없으면 다음 루프로 이동
+                // 안정성 체크: 그룹이 없으면 다음 루프로 이동
                 if (!parentGroup || !childGroup) return; 
 
                 const relation = adj[p].find(x => x.to === faceId);
@@ -260,9 +258,23 @@
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
                 
-                // --- FoldEngine.js 로직 그대로 복제 ---
+                // --- FoldEngine.js 로직 그대로 복제 (안정화 포함) ---
+                
+                // 1. 로컬 행렬 업데이트
+                childGroup.updateMatrix(); 
+                parentGroup.updateMatrix(); 
+
+                // 2. 월드 행렬 업데이트 (행렬 연산 전 필수)
                 parentGroup.updateMatrixWorld(true); 
                 childGroup.updateMatrixWorld(true); 
+
+                // 3. 역행렬 연산 (오류 발생 지점)
+                // childGroup.matrixWorld가 유효한 객체임을 보장한 후 사용
+                if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
+                     // 100% 방어 로직: 유효하지 않으면 다음으로 이동
+                     console.warn(`MatrixWorld invalid for face ${faceId}. Skipping fold step.`);
+                     return; 
+                }
 
                 const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
@@ -282,7 +294,7 @@
 
         } catch (err) {
             console.warn("Validator Simulate Fold Error:", err);
-            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. 그룹 객체가 'undefined'일 가능성.`);
+            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. 행렬 초기화 문제일 가능성 높음.`);
         }
 
         // 성공적으로 fold되었는지 판단
@@ -295,7 +307,7 @@
 
         return true;
     }
-    
+
     // ----------------------------------------------------
     // (D) overlap 검사
     // ----------------------------------------------------

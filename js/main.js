@@ -235,7 +235,6 @@
         if (overlapSolid === SOLID_TYPE.CUBE) {
             netObj = CubeNets.getRandomOverlapProblem();
         } else if (overlapSolid === SOLID_TYPE.RECT) {
-            // RectPrismNets.getRandomRectOverlapProblem()는 이전 단계에서 추가됨
             netObj = RectPrismNets.getRandomRectOverlapProblem(); 
         } else {
             // BOTH
@@ -283,7 +282,7 @@
     function loadProblem() {
 
         currentProblem = problems[currentIndex];
-        window.CubeProject.currentProblem = currentProblem; // UI.js에서 접근 가능하도록 업데이트
+        window.CubeProject.currentProblem = currentProblem; 
         
         if (!currentProblem) {
             showResultPage();
@@ -292,7 +291,7 @@
 
         document.getElementById("btn-next").classList.add("hidden");
         document.getElementById("btn-check").classList.remove("hidden");
-        document.getElementById("btn-check").disabled = false; // Check 버튼 활성화
+        document.getElementById("btn-check").disabled = false; 
 
         const title = document.getElementById("problem-title");
         const idx = currentIndex + 1;
@@ -313,15 +312,28 @@
             opt.highlightPositions = true;
         }
 
-        // 전개도 렌더링
+        // 전개도 렌더링 (UI 쪽에서 removedFaceId가 설정됨)
         UI.renderNet(currentProblem.net, opt);
-
+        
         // 3D 초기화
         FoldEngine.init(threeCanvas);
         FoldEngine.currentNet = currentProblem.net;
-        FoldEngine.loadNet(currentProblem.net);
+
+        // ⭐ 2. 3D 뷰 초기화: 제거된 조각만 제외하고 5조각만 보이도록 처리
+        const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
         
-        // 1. 오류 수정: 문제 로드 시 전개도가 접히는 코드 삭제 (unfold 상태 유지)
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            const removedId = window.UI.getRemovedFaceId(); // UI에서 결정된 removedId 가져오기
+            const removedFace = netFor3D.faces.find(f => f.id === removedId);
+            
+            // 임시로 removedFace를 화면 바깥으로 이동 (3D 뷰에만 적용)
+            if (removedFace) {
+                removedFace.u = -100;
+                removedFace.v = -100;
+            }
+        }
+        
+        FoldEngine.loadNet(netFor3D);
         FoldEngine.unfoldImmediate(); 
         
         // 겹침 모드라면 Overlap 초기화
@@ -338,14 +350,18 @@
 
         document.getElementById("btn-check").addEventListener("click", () => {
             
-            // 중복 클릭 방지
             document.getElementById("btn-check").disabled = true;
 
-            // 1. 3D 모델을 펼친 상태에서 접는 애니메이션 실행
+            // 1. 전개도 완성하기 모드에서는 UI.checkPieceResult가 FoldEngine.loadNet(정답 포함)을 호출함.
+            // 겹침 찾기 모드에서는 currentNet을 FoldEngine에 로드
+            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                 FoldEngine.loadNet(currentProblem.net);
+            }
+
+            // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
             FoldEngine.unfoldImmediate(); 
-            FoldEngine.foldAnimate(1) // 1초 동안 접기
+            FoldEngine.foldAnimate(1) 
                 .then(() => {
-                    // 2. 애니메이션 완료 후 정답 판정
                     let correct = false;
 
                     if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
@@ -354,23 +370,22 @@
                         correct = UI.checkOverlapResult(currentProblem.net);
                     }
 
-                    // 3. 결과 팝업 및 다음 문제 준비
                     if (correct) {
                         alert("정답입니다! 🎉");
                         document.getElementById("btn-check").classList.add("hidden");
                         document.getElementById("btn-next").classList.remove("hidden");
                     } else {
                         alert("틀렸습니다. 다시 생각해 볼까요? 🤔");
-                        // 오답 시 다시 체크 가능하게
+                        
                         document.getElementById("btn-check").disabled = false; 
-                        // 3D 모델 다시 펼침
                         FoldEngine.unfoldImmediate();
                         
-                        // 겹침 찾기 모드의 경우, 오답 시 선택 초기화
                         if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
                             Overlap.startSelection(currentProblem.net);
-                            UI.renderNet(currentProblem.net, {}); // 렌더링 초기화
+                            UI.renderNet(currentProblem.net, {}); 
                         }
+                        
+                        // 전개도 완성하기 모드에서는 placed가 유지되고 3D 모델이 펼쳐짐
                     }
                 })
                 .catch(err => {

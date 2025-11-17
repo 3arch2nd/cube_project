@@ -98,9 +98,6 @@
         const objectsToRemove = scene.children.filter(obj => obj.type === 'Group');
         objectsToRemove.forEach(obj => scene.remove(obj));
         
-        // 카메라/빛은 init에서 이미 처리되었으므로 추가 로직은 생략 가능하나,
-        // 안전을 위해 Group만 제거하는 것이 좋다. (위 코드 반영)
-
         
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         
@@ -331,7 +328,6 @@
                 // 1. 펼친 상태로 초기화
                 FoldEngine.unfoldImmediate(); 
                 
-                // scene.updateMatrixWorld(true); // unfoldImmediate에서 호출됨.
 
                 order.forEach(faceId => {
                     const p = parent[faceId];
@@ -340,6 +336,7 @@
                     const parentGroup = faceGroups.find(g => g.faceId === p);
                     const childGroup = faceGroups.find(g => g.faceId === faceId);
                     
+                    // ⭐ 안정성 체크 강화: 그룹이 반드시 존재해야 함
                     if (!parentGroup || !childGroup) return; 
 
                     const relation = adj[p].find(x => x.to === faceId);
@@ -347,13 +344,10 @@
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
 
                     // point는 3D 월드 좌표계의 회전 기준점. 
-                    // 이 기준점을 전체 전개도 중앙 정렬 오프셋만큼 보정한다.
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
                     
                     // ⭐ 회전 순서가 매우 중요: 부모가 접혀야 자식도 그에 맞춰 접힌다.
-                    // Three.js의 계층 구조를 사용하지 않고 개별적으로 회전을 적용하므로,
-                    // 매 프레임마다 이전까지의 누적된 회전/변환을 반영해야 한다.
                     
                     // 1. 자식 그룹의 현재 월드 행렬을 역변환하여 기준점의 로컬 좌표를 찾는다.
                     childGroup.updateMatrixWorld(true); 
@@ -362,9 +356,18 @@
 
                     // 2. 로컬 좌표를 원점으로 이동 (회전의 중심을 로컬 원점으로)
                     childGroup.position.sub(localPoint);
-                    childGroup.updateMatrixWorld(true);
+                    // ⭐ 여기서 updateMatrixWorld를 다시 호출하면 안 됨. World 행렬을 망가뜨림.
+                    childGroup.updateMatrix(); 
 
                     // 3. 월드 축을 자식 그룹의 로컬 좌표계로 변환 (회전축)
+                    // 현재 childGroup.matrixWorld가 정확히 업데이트되어 있지 않으므로, parentGroup 기준으로 변환합니다.
+                    // Three.js의 rotateOnAxis는 group.localMatrix 기준으로 동작하므로, 
+                    // 로컬 축을 구하기 위해 `childGroup.matrixWorld.getInverse()`를 사용합니다.
+                    
+                    // 하지만 부모가 이미 월드 좌표계에서 정확히 배치되어 있다면,
+                    // 자식의 로컬 좌표계는 부모와의 연결 상태(펼친 상태의 초기 행렬)를 기준으로 해야 합니다.
+                    // unfoldImmediate가 이미 호출되었으므로, childGroup의 matrixWorld는 펼쳐진 상태를 반영합니다.
+                    
                     const localAxis = axis.clone().transformDirection(childGroup.matrixWorld.getInverse());
                     
                     // 4. 회전 적용

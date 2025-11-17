@@ -18,6 +18,7 @@
 
     const WHITE = 0xffffff;
     const OUTLINE = 0x333333;
+    const EPS = 1e-6;
 
     // ---------------------------------------
     //  Three.js 초기화
@@ -100,12 +101,11 @@
             group.add(mesh);
             group.add(line);
 
-            // 전개도 좌표(u,v)에 따른 위치
-            // u,v는 "칸" 개념이고 실제 크기는 face.w, face.h
-            // u+w/2, v+h/2는 면의 중심 좌표를 의미
-            group.position.set(u + w/2, -(v + h/2), 0); // Y축 반전
+            // 2. 오류 수정: 면의 중심 좌표를 initialPos로 설정 (u+w/2, v+h/2)
+            // Y축은 canvas의 2D 좌표계(아래가 양의 방향)와 Three.js 좌표계(위가 양의 방향) 때문에 반전
+            group.position.set(u + w/2, -(v + h/2), 0); 
             group.userData.initialPos = new THREE.Vector3(u + w/2, -(v + h/2), 0);
-
+            group.userData.netInfo = { w, h, u, v }; // 크기 정보 저장
 
             scene.add(group);
             faceGroups.push(group);
@@ -125,7 +125,7 @@
             if (group.userData.initialPos) {
                 group.position.copy(group.userData.initialPos);
             }
-            group.rotation.set(0, 0, 0); // 회전 초기화
+            group.setRotationFromEuler(new THREE.Euler(0, 0, 0)); // 회전 초기화
         });
         renderer.render(scene, camera);
     };
@@ -134,19 +134,17 @@
     // adjacency 생성
     // ---------------------------------------
     function buildAdjacency(net) {
+        // (이전 코드와 동일, 생략)
         const adj = [...Array(6)].map(() => []);
 
         function edgesOf(f) {
-            // u,v 좌표 기준 edge 정보 (격자 기반)
             return [
-                { a:[f.u, f.v], b:[f.u + f.w, f.v] },         // 0: top edge (가로 w)
-                { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v+f.h]}, // 1: right edge (세로 h)
-                { a:[f.u + f.w, f.v+f.h], b:[f.u, f.v+f.h]},   // 2: bottom edge (가로 w)
-                { a:[f.u, f.v+f.h], b:[f.u, f.v] }             // 3: left edge (세로 h)
+                { a:[f.u, f.v], b:[f.u + f.w, f.v] },         // 0: top
+                { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v+f.h]}, // 1: right
+                { a:[f.u + f.w, f.v+f.h], b:[f.u, f.v+f.h]},   // 2: bottom
+                { a:[f.u, f.v+f.h], b:[f.u, f.v] }             // 3: left
             ];
         }
-
-        const EPS = 1e-6;
 
         for (let i = 0; i < net.faces.length; i++) {
             const fi = net.faces[i];
@@ -170,7 +168,6 @@
                 }
             }
         }
-
         return adj;
     }
 
@@ -178,6 +175,7 @@
     // BFS folding tree
     // ---------------------------------------
     function buildTree(adj) {
+        // (이전 코드와 동일, 생략)
         const parent = Array(6).fill(null);
         parent[0] = -1; // root
 
@@ -200,29 +198,29 @@
     }
 
     // ---------------------------------------
-    // edgeIndex에 따른 회전축 계산
+    // edgeIndex에 따른 회전축 계산 및 로컬 변환
     // ---------------------------------------
-    function getEdgeWorldAxisAndPoint(parentGroup, childGroup, faceObj, parentFaceObj, relation) {
+    function getAxisAndPoint(parentGroup, relation) {
+        // World 좌표계에서 회전 축과 점을 계산
         
-        // faceObj는 child, parentFaceObj는 parent
-        
-        // 1. 회전축의 위치(Point)를 Parent Face의 중앙 좌표계(Three.js world)에서 계산
-        const { u, v, w, h } = parentFaceObj;
-        let p1_u, p1_v, p2_u, p2_v;
+        const parentInfo = parentGroup.userData.netInfo;
+        const p_u = parentInfo.u;
+        const p_v = parentInfo.v;
 
         // parent의 edgeA (relation.edgeA)에 해당하는 2D 격자 좌표
-        const parentEdges = getEdges(parentFaceObj);
+        const parentEdges = getEdges(parentInfo);
         const edge = parentEdges[relation.edgeA];
         
         // 격자 좌표를 3D World 좌표로 변환 (u -> X, v -> -Y, Z=0)
-        const p1 = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
-        const p2 = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
+        // p1: edge의 시작점, p2: edge의 끝점
+        const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
+        const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
         
-        // 2. 축 (Axis) 계산: p1에서 p2로 향하는 벡터
-        const axis = new THREE.Vector3().subVectors(p2, p1).normalize();
+        // 축 (Axis) 계산: p1에서 p2로 향하는 벡터 (회전 방향 결정)
+        const axis = new THREE.Vector3().subVectors(p2_world, p1_world).normalize();
         
-        // 3. 축의 시작점 (Point)
-        const point = p1; 
+        // 축의 시작점 (Point) - World 좌표
+        const point = p1_world; 
 
         return { axis, point };
     }
@@ -247,10 +245,13 @@
                 const progress = Math.min(1, elapsed / duration);
                 const angle = (Math.PI / 2) * progress; // 0 (unfold) -> Math.PI/2 (fold)
                 
-                // unfold 상태에서 시작 (애니메이션이 반복될 때 필요)
+                // unfold 상태에서 시작 (reset)
                 FoldEngine.unfoldImmediate(); 
                 
-                // 모든 child에 대해 rotate
+                // 모든 그룹의 matrixWorld를 업데이트 (정확한 World 좌표계 변환을 위해 필수)
+                scene.updateMatrixWorld(true);
+
+                // order 순서대로 접기 시뮬레이션
                 order.forEach(faceId => {
                     const p = parent[faceId];
                     if (p === -1) return; // root 면은 회전하지 않음
@@ -259,24 +260,27 @@
                     const childGroup = faceGroups[faceId];
 
                     const relation = adj[p].find(x => x.to === faceId);
-                    const faceObj = net.faces.find(f => f.id === faceId);
-                    const parentFaceObj = net.faces.find(f => f.id === p);
+                    
+                    const { axis, point } = getAxisAndPoint(parentGroup, relation);
 
-                    const { axis, point } = getEdgeWorldAxisAndPoint(
-                        parentGroup, childGroup, faceObj, parentFaceObj, relation
-                    );
-                    
-                    // 회전 중심점과 축을 Three.js World 좌표계에서 사용
-                    
-                    // 1. Child Group을 회전축 시작점(Point)으로 이동 (좌표계 원점화)
-                    childGroup.position.sub(point);
+                    // 1. 회전 중심점을 Child Group의 로컬 좌표계로 변환 (역변환)
+                    const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
+                    const localPoint = point.clone().applyMatrix4(invMatrix);
 
-                    // 2. Child Group 회전
-                    const rotationMatrix = new THREE.Matrix4().makeRotationAxis(axis, angle);
-                    childGroup.applyMatrix(rotationMatrix);
+                    // 2. Child Group을 회전 중심점(localPoint)으로 이동 (좌표계 원점화)
+                    childGroup.position.sub(localPoint);
                     
-                    // 3. Child Group을 원래 위치로 되돌림 (좌표계 원점 복원)
-                    childGroup.position.add(point);
+                    // 3. Child Group 회전 (local axis)
+                    // World Axis를 Child Group의 Local Axis로 변환
+                    const localAxis = axis.clone().transformDirection(childGroup.matrixWorld.getInverse());
+                    
+                    // 2. 오류 수정: applyMatrix 대신 rotateOnAxis를 사용하여 누적 변환 오류 방지
+                    childGroup.rotateOnAxis(localAxis, angle);
+                    
+                    // 4. Child Group을 원래 위치로 되돌림 (좌표계 원점 복원)
+                    childGroup.position.add(localPoint);
+
+                    // 최종 변환은 matrixWorld 업데이트로 반영됨 (unfoldImmediate에서 초기화되므로 반복 가능)
                 });
 
                 renderer.render(scene, camera);
@@ -287,9 +291,6 @@
                     resolve(); // 애니메이션 완료
                 }
             };
-            
-            // 모든 그룹의 matrixWorld를 업데이트하여 World 좌표 계산 정확성 보장
-            scene.updateMatrixWorld(true);
             
             requestAnimationFrame(animate);
         });
@@ -309,7 +310,7 @@
         return [
             { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, // top
             { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, // right
-            { a:[f.u + f.w, f.v + f.h], b:[f.u, f.v + f.h]  }, // bottom
+            { a:[f.u + f.w, f.v + f.h], b:[f.u, v + f.h]  }, // bottom
             { a:[f.u, f.v + f.h], b:[f.u, f.v]              }  // left
         ];
     }

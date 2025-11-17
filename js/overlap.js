@@ -1,45 +1,44 @@
 /**
- * overlap.js – 직육면체 + 정육면체 겹침 판정 확장
+ * overlap.js – 직육면체 + 정육면체 겹침 판정 완전 확장 버전
  *
- * 제공 기능:
+ * 기능:
  *   Overlap.startSelection(net)
- *   Overlap.recordClick(x,y)
+ *   Overlap.recordClick(u,v)
  *   Overlap.getSelections()
- *
  *   Overlap.checkUserAnswer(net)
- *   Overlap.noOverlapCheck()   // validator용
+ *   Overlap.noOverlapCheck()     // validator.js에서 충돌 검사용
  */
 
 (function () {
-    'use strict';
+    "use strict";
 
     const Overlap = {};
     window.Overlap = Overlap;
 
-    // ------------------------------
-    // 상태
-    // ------------------------------
+    // ----------------------------
+    // 상태 변수
+    // ----------------------------
     let currentNet = null;
     let first = null;
     let second = null;
 
-    // ------------------------------
-    // 외부에서 selections 접근
-    // ------------------------------
+    // ----------------------------
+    // selections 조회
+    // ----------------------------
     Overlap.getSelections = () => ({ first, second });
 
-    // ------------------------------
+    // ----------------------------
     // 초기화
-    // ------------------------------
+    // ----------------------------
     Overlap.startSelection = function (net) {
         currentNet = net;
         first = null;
         second = null;
     };
 
-    // ------------------------------
-    // canvas click → 영역 판정
-    // ------------------------------
+    // ----------------------------
+    // canvas click로 (u,v) 선택
+    // ----------------------------
     Overlap.recordClick = function (u, v) {
         if (!first) {
             first = detectElement(u, v);
@@ -51,16 +50,18 @@
         return null;
     };
 
-    // -------------------------------------------------------
-    // detectElement(u,v): 점 또는 선을 찾는 핵심 함수
-    // -------------------------------------------------------
+    // ============================================================
+    // 1. 전개도 상의 점/선 선택 감지
+    // ============================================================
+
     function detectElement(u, v) {
         /**
-         * 전개도 좌표 (u,v) 를 기준으로
-         * 어떤 face의 edge, vertex를 클릭했는지 판단한다.
+         * 전개도 좌표 (u,v)를 기준으로
+         * vertex / edge 를 클릭했는지 판단.
          *
-         * 정사각형 전용 → 직육면체로 확장함.
+         * 직육면체 지원을 위해 w,h 크기 반영.
          */
+        const eps = 0.2;
 
         for (const f of currentNet.faces) {
             const x0 = f.u;
@@ -68,26 +69,28 @@
             const x1 = f.u + f.w;
             const y1 = f.v + f.h;
 
-            // Vertex tolerance
-            const eps = 0.15;
-
-            // 4개 vertex 체크
+            // --- Vertex 판정 ---
             const verts = [
-                {key:"v", id:f.id, x:x0, y:y0},
-                {key:"v", id:f.id, x:x1, y:y0},
-                {key:"v", id:f.id, x:x1, y:y1},
-                {key:"v", id:f.id, x:x0, y:y1},
+                { x:x0, y:y0 },
+                { x:x1, y:y0 },
+                { x:x1, y:y1 },
+                { x:x0, y:y1 }
             ];
-            for (const vtx of verts) {
-                if (Math.abs(u - vtx.x) < eps && Math.abs(v - vtx.y) < eps) {
-                    return { type:"vertex", face: f.id, x:vtx.x, y:vtx.y };
+            for (const vt of verts) {
+                if (Math.abs(u - vt.x) < eps && Math.abs(v - vt.y) < eps) {
+                    return {
+                        type: "vertex",
+                        face: f.id,
+                        x: vt.x,
+                        y: vt.y
+                    };
                 }
             }
 
-            // Edge 체크
-            const edgeEps = 0.15;
+            // --- Edge 판정 ---
+            const edgeEps = 0.2;
 
-            // top edge
+            // top
             if (v > y0 - edgeEps && v < y0 + edgeEps && (u >= x0 && u <= x1))
                 return { type:"edge", face:f.id, edge:0 };
             // right
@@ -104,30 +107,37 @@
         return null;
     }
 
-    // -------------------------------------------------------
-    // 3D world 좌표 변환
-    // -------------------------------------------------------
+    // ============================================================
+    // 2. 3D world 좌표 변환 함수들
+    // ============================================================
+
     function getWorldVector(faceId, u, v) {
         const groups = FoldEngine.getFaceGroups();
-        const g = groups.find(x => x.faceId === faceId);
+        if (!groups) return null;
+
+        const g = groups.find(obj => obj.faceId === faceId);
         if (!g) return null;
 
-        // face의 local 좌표계: 중심 기준
-        const f = currentNet.faces.find(f => f.id === faceId);
+        const f = currentNet.faces.find(x => x.id === faceId);
+
+        // face의 local 좌표: 중심 기준
         const lx = u - (f.u + f.w / 2);
         const ly = -(v - (f.v + f.h / 2));
         const lz = 0;
 
         const local = new THREE.Vector3(lx, ly, lz);
         const world = local.applyMatrix4(g.matrixWorld);
-
         return world;
     }
 
-    // edge midpoint world position
+    // vertex world pos
+    function vertexWorldPos(face, ux, vy) {
+        return getWorldVector(face.id, ux, vy);
+    }
+
+    // edge midpoint world pos
     function edgeWorldPos(face, edgeIndex) {
         const { u, v, w, h } = face;
-
         let pu = u, pv = v;
 
         switch (edgeIndex) {
@@ -136,83 +146,64 @@
             case 2: pu = u + w/2; pv = v+h;   break;
             case 3: pu = u;       pv = v+h/2; break;
         }
+
         return getWorldVector(face.id, pu, pv);
     }
 
-    // vertex world pos
-    function vertexWorldPos(face, u, v) {
-        return getWorldVector(face.id, u, v);
+    function isSameWorldPosition(a, b) {
+        if (!a || !b) return false;
+        const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        return (dx*dx + dy*dy + dz*dz) < 0.0005;
     }
 
-    // -------------------------------------------------------
-    // 두 선택 요소의 3D world 좌표 비교
-    // -------------------------------------------------------
-    function isSameWorldPosition(p, q) {
-        if (!p || !q) return false;
-        const dx = p.x - q.x;
-        const dy = p.y - q.y;
-        const dz = p.z - q.z;
-        return (dx*dx + dy*dy + dz*dz) < 0.0004;  // 넉넉한 오차
-    }
-
-    // -------------------------------------------------------
-    // 체크: 두 선택 요소가 겹치는가?
-    // -------------------------------------------------------
+    // ============================================================
+    // 3. 실제 겹침(정답) 판정
+    // ============================================================
     Overlap.checkUserAnswer = function (net) {
         if (!first || !second) return false;
 
-        // faceGroups 확보
-        const faceGroups = FoldEngine.getFaceGroups();
-        if (!faceGroups || faceGroups.length !== 6) return false;
+        const f1 = net.faces.find(x => x.id === first.face);
+        const f2 = net.faces.find(x => x.id === second.face);
+
+        if (!f1 || !f2) return false;
 
         // vertex vs vertex
         if (first.type === "vertex" && second.type === "vertex") {
-            const f1 = currentNet.faces.find(f => f.id === first.face);
-            const f2 = currentNet.faces.find(f => f.id === second.face);
-
             const p = vertexWorldPos(f1, first.x, first.y);
             const q = vertexWorldPos(f2, second.x, second.y);
-
             return isSameWorldPosition(p, q);
         }
 
         // edge vs edge
         if (first.type === "edge" && second.type === "edge") {
-            const f1 = currentNet.faces.find(f => f.id === first.face);
-            const f2 = currentNet.faces.find(f => f.id === second.face);
-
             const p = edgeWorldPos(f1, first.edge);
             const q = edgeWorldPos(f2, second.edge);
-
             return isSameWorldPosition(p, q);
         }
 
-        // vertex vs edge → 잘못된 조합
+        // 서로 다른 타입은 정답 없음
         return false;
     };
 
-    // -------------------------------------------------------
-    // validator.js용: 접힘 후 면끼리 겹침 있는지 검사
-    // -------------------------------------------------------
+    // ============================================================
+    // 4. validator용: 접힘 후 실제 충돌/겹침 여부 검사
+    // ============================================================
     Overlap.noOverlapCheck = function () {
         const groups = FoldEngine.getFaceGroups();
+        if (!groups) return true;
 
-        // bounding box 간 단순 충돌 검사
         for (let i = 0; i < groups.length; i++) {
-            for (let j = i+1; j < groups.length; j++) {
+            for (let j = i + 1; j < groups.length; j++) {
                 const gi = new THREE.Box3().setFromObject(groups[i]);
                 const gj = new THREE.Box3().setFromObject(groups[j]);
 
                 if (gi.intersectsBox(gj)) {
-                    // 정육면체/직육면체는 인접 면끼리 붙는 것은 정상 → 중심 거리 확인
                     const ci = gi.getCenter(new THREE.Vector3());
                     const cj = gj.getCenter(new THREE.Vector3());
-
                     const d2 = ci.distanceToSquared(cj);
-                    if (d2 < 0.001) {
-                        // 지나치게 가까우면 충돌로 판단
-                        return false;
-                    }
+
+                    // 너무 가까우면 충돌로 간주 (면끼리 overlapping)
+                    if (d2 < 0.001) return false;
                 }
             }
         }

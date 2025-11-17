@@ -20,7 +20,7 @@
     const OUTLINE = 0x333333;
     const EPS = 1e-6;
     
-    // ⭐ 3D 뷰 중앙 정렬을 위한 상태 변수
+    // 3D 뷰 중앙 정렬을 위한 상태 변수
     let centerOffset3D = new THREE.Vector3(0, 0, 0);
 
 
@@ -83,10 +83,14 @@
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         
-        // ⭐ 5. 오류 수정: 전개도의 2D 중심 좌표 계산 (3D 시점 중앙 정렬용)
+        // 전개도의 2D 중심 좌표 계산 (3D 시점 중앙 정렬용)
         let minU = Infinity, maxU = -Infinity;
         let minV = Infinity, maxV = -Infinity;
-        for (const f of net.faces) {
+        
+        // ⭐ 유효한 면만 계산에 포함
+        const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
+        
+        for (const f of validFaces) {
             minU = Math.min(minU, f.u);
             maxU = Math.max(maxU, f.u + f.w);
             minV = Math.min(minV, f.v);
@@ -96,12 +100,11 @@
         const netCenterU = (minU + maxU) / 2;
         const netCenterV = (minV + maxV) / 2;
         
-        // World 좌표계에서 중심점: Y축 반전
         centerOffset3D.set(netCenterU, -netCenterV, 0);
 
 
         // faceGroup 생성
-        net.faces.forEach(face => {
+        validFaces.forEach(face => {
             const { id, u, v, w, h } = face;
 
             const group = new THREE.Group();
@@ -122,12 +125,9 @@
             group.add(mesh);
             group.add(line);
 
-            // 면의 중심 좌표 (2D 그리드 기준)
             const faceCenterX = u + w/2;
             const faceCenterY = v + h/2;
             
-            // ⭐ 면의 초기 위치를 계산 (면의 중심점 - 전체 전개도의 중심점)
-            // Y축 반전
             const initialPos = new THREE.Vector3(
                 faceCenterX - netCenterU, 
                 -(faceCenterY - netCenterV), 
@@ -186,13 +186,16 @@
                 { a:[f.u, f.v+f.h], b:[f.u, f.v] }             
             ];
         }
+        
+        // ⭐ 면의 ID는 0부터 5까지라고 가정하지만, net.faces 배열에는 유효한 면만 들어옴.
+        const faces = net.faces.filter(f => f); 
 
-        for (let i = 0; i < net.faces.length; i++) {
-            const fi = net.faces[i];
+        for (let i = 0; i < faces.length; i++) {
+            const fi = faces[i];
             const Ei = edgesOf(fi);
 
-            for (let j = i + 1; j < net.faces.length; j++) {
-                const fj = net.faces[j];
+            for (let j = i + 1; j < faces.length; j++) {
+                const fj = faces[j];
                 const Ej = edgesOf(fj);
 
                 for (let ei = 0; ei < 4; ei++) {
@@ -215,22 +218,30 @@
     // [포함된 헬퍼 함수] BFS folding tree
     // ---------------------------------------
     function buildTree(adj) {
-        const parent = Array(6).fill(null);
-        parent[0] = -1; 
+        // 면의 최대 ID를 기준으로 parent 배열 크기를 결정 (최대 6개면)
+        const maxId = faceGroups.reduce((max, g) => Math.max(max, g.faceId), -1);
+        if (maxId < 0) return { parent: [], order: [] };
+
+        const parent = Array(maxId + 1).fill(null);
+        const rootId = faceGroups[0].faceId; // 항상 첫 번째 그룹을 root로 가정
+        parent[rootId] = -1; 
 
         const order = [];
-        const Q = [0];
+        const Q = [rootId];
 
         while (Q.length) {
             const f = Q.shift();
             order.push(f);
 
-            adj[f].forEach(n => {
-                if (parent[n.to] === null) {
-                    parent[n.to] = f;
-                    Q.push(n.to);
-                }
-            });
+            // adj[f]가 정의되어 있는지 확인
+            if (adj[f]) {
+                 adj[f].forEach(n => {
+                    if (parent[n.to] === null) {
+                        parent[n.to] = f;
+                        Q.push(n.to);
+                    }
+                });
+            }
         }
         return { parent, order };
     }
@@ -245,6 +256,9 @@
         const parentEdges = getEdges(parentInfo);
         const edge = parentEdges[relation.edgeA];
         
+        // ⭐ 2. 오류 수정: 면의 크기가 0일 경우 TypeError 방지 (이 단계에서는 이미 loadNet에서 필터링되었어야 함)
+        if (!edge) return { axis: new THREE.Vector3(0, 0, 1), point: new THREE.Vector3(0, 0, 0) };
+
         // 격자 좌표를 3D World 좌표로 변환 (u -> X, v -> -Y, Z=0)
         const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
         const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
@@ -267,6 +281,9 @@
         const { parent, order } = buildTree(adj);
         parentOf = parent;
         
+        // ⭐ 2. 오류 수정: 접을 면이 1개 이하일 경우 (root만 존재) 접기 시도 중단
+        if (order.length <= 1) return Promise.resolve();
+
         return new Promise(resolve => {
             const start = performance.now();
             const animate = (time) => {
@@ -282,14 +299,15 @@
                     const p = parent[faceId];
                     if (p === -1) return; 
 
-                    const parentGroup = faceGroups[p];
-                    const childGroup = faceGroups[faceId];
+                    const parentGroup = faceGroups.find(g => g.faceId === p);
+                    const childGroup = faceGroups.find(g => g.faceId === faceId);
+                    
+                    if (!parentGroup || !childGroup) return; // 면이 로드되지 않았으면 건너뜀
 
                     const relation = adj[p].find(x => x.to === faceId);
                     
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
 
-                    // 1. 회전 중심점을 Child Group의 로컬 좌표계로 변환
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
                     const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);

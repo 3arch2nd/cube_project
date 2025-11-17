@@ -79,7 +79,6 @@
         // ① 제거된 face는 그리지 않는다
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                // ⭐ 1. 문제 도형의 테두리(진한 검정 #333)와 내부 선(연한 #aaa) 구분
                 drawFace(f, "#eaeaea", "#333", "#aaa");   // 원래 면
             }
         }
@@ -180,7 +179,7 @@
     // --------------------------------------
     // face 그리기 – w×h 지원
     // --------------------------------------
-    function drawFace(f, fill, outerStroke = "#333", innerStroke = "#aaa") { // ⭐ innerStroke 기본값 변경
+    function drawFace(f, fill, outerStroke = "#333", innerStroke = "#aaa") { 
         const x = (f.u + U_OFFSET) * UNIT; 
         const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
@@ -188,33 +187,44 @@
 
         ctx.save();
         ctx.fillStyle = fill;
-        
-        // 먼저 내부 선 그리기 (연하고 얇게)
+
+        // 1. 면 전체를 그린다 (배경)
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.fill();
+
+        // 2. 내부 선을 그린다 (연하고 얇게)
         ctx.strokeStyle = innerStroke; 
         ctx.lineWidth = 1; 
-        ctx.beginPath();
-        // 가로 내부 선
-        if (f.h > 0 && f.w > 0) { // 사각형일 경우
-             // 가로줄 그리기 (위, 아래 경계선은 테두리 담당이므로 제외)
-             for(let i = 1; i < f.h; i++) {
+        
+        if (f.w > 0 && f.h > 0) { 
+             // 가로줄 그리기 (위, 아래 경계선은 테두리 담당)
+             // w, h가 1칸 이상일 때만 내부 선을 그립니다.
+             const cellW = Math.round(w / UNIT);
+             const cellH = Math.round(h / UNIT);
+
+             for(let i = 1; i < cellH; i++) {
+                ctx.beginPath();
                 ctx.moveTo(x, y + i * UNIT);
                 ctx.lineTo(x + w, y + i * UNIT);
+                ctx.stroke();
              }
-             // 세로줄 그리기 (좌, 우 경계선은 테두리 담당이므로 제외)
-             for(let i = 1; i < f.w; i++) {
+             // 세로줄 그리기 (좌, 우 경계선은 테두리 담당)
+             for(let i = 1; i < cellW; i++) {
+                ctx.beginPath();
                 ctx.moveTo(x + i * UNIT, y);
                 ctx.lineTo(x + i * UNIT, y + h);
+                ctx.stroke();
              }
         }
-        ctx.stroke();
-
-        // 그 다음 테두리 그리기 (진하고 굵게)
+        
+        // 3. 테두리를 그린다 (가장 진하고 굵게)
         ctx.strokeStyle = outerStroke; 
         ctx.lineWidth = 2; 
         ctx.beginPath();
         ctx.rect(x, y, w, h);
-        ctx.fill();
-        ctx.stroke();
+        ctx.stroke(); 
+
         ctx.restore();
     }
 
@@ -325,7 +335,6 @@
     // [포함된 헬퍼 함수] getEdges
     // --------------------------------------
     function getEdges(f) {
-        // ⭐ 면이 유효한지 확인
         if (!f || f.w === undefined || f.h === undefined) {
             return [];
         }
@@ -490,11 +499,9 @@
         if (f) {
             f.u = placed.u;
             f.v = placed.v;
-            f.w = placed.w; // w, h도 업데이트 필요
+            f.w = placed.w; 
             f.h = placed.h;
         } else {
-             // removedFaceId에 해당하는 면이 없으면 (예외 상황)
-             // placed 정보를 바탕으로 새로운 면을 추가
              netClone.faces.push({
                  id: removedFaceId,
                  u: placed.u,
@@ -502,10 +509,10 @@
                  w: placed.w,
                  h: placed.h
              });
-             netClone.faces.sort((a,b) => a.id - b.id); // ID 순으로 정렬
+             netClone.faces.sort((a,b) => a.id - b.id);
         }
         
-        // 2. 오류 수정: 정답 확인 시, 정답을 포함한 완전한 netClone을 로드
+        // 2. 오류 수정: 정답을 포함한 완전한 netClone을 로드하여 FoldEngine의 상태를 업데이트
         window.FoldEngine.loadNet(netClone);
 
         const result = Validator.validateNet(netClone);

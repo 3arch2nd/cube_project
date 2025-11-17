@@ -23,7 +23,6 @@
         return false;
     }
 
-    // (A), (B) 생략... (변경 없음)
     // ----------------------------------------------------
     // 면의 4개 edge의 좌표 (정사각형이 아닌 w,h 반영)
     // ----------------------------------------------------
@@ -37,7 +36,7 @@
             { a:[u, v+h],     b:[u, v]         }    // left
         ];
     }
-
+    
     // edge 길이 (투명성: 전개도 좌표에서는 w/h 그대로길이)
     function edgeLength(edge) {
         const [x1, y1] = edge.a;
@@ -56,6 +55,32 @@
         );
     }
 
+    function validateFaces(net) {
+        if (!net || !Array.isArray(net.faces)) {
+            return fail("전개도 데이터가 올바르지 않습니다.");
+        }
+
+        const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
+
+        if (validFaces.length !== 6) {
+            return fail(`전개도는 반드시 6개의 면으로 구성되어야 합니다. 현재 유효 면 개수: ${validFaces.length}`);
+        }
+        
+        // ... (ID 중복 체크 등 생략) ...
+        const idSet = new Set();
+        for (const f of validFaces) {
+            if (typeof f.id !== 'number') return fail("면 id가 숫자가 아닙니다.");
+            if (idSet.has(f.id)) return fail("중복된 face id가 있습니다: " + f.id);
+            idSet.add(f.id);
+
+            if (f.w <= 0 || f.h <= 0) {
+                return fail("면의 가로/세로 크기가 잘못되었습니다.");
+            }
+        }
+
+        return true;
+    }
+
     function buildAdjacency(net) {
         const faces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         const maxId = faces.reduce((max, f) => Math.max(max, f.id), -1);
@@ -64,8 +89,7 @@
         if (faces.length !== 6) {
              return fail(`adjacency 검사 실패: 면 개수 ${faces.length}`);
         }
-        
-        // ... (Adjacency 계산 로직 생략, 변경 없음) ...
+
         for (let i = 0; i < faces.length; i++) {
             const fi = faces[i];
             const Ei = getEdges(fi);
@@ -124,6 +148,20 @@
         return true;
     }
 
+    // [포함된 헬퍼 함수] edgeIndex에 따른 회전축 계산 및 로컬 변환 (시뮬레이션용)
+    function getAxisAndPointSim(parentFace, relation) {
+        const parentEdges = getEdges(parentFace);
+        const edge = parentEdges[relation.edgeA];
+        
+        const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
+        const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
+        
+        const axis = new THREE.Vector3().subVectors(p2_world, p1_world).normalize();
+        const point = p1_world; 
+
+        return { axis, point };
+    }
+
 
     // ----------------------------------------------------
     // (C) FoldEngine 기반 실제 fold 테스트
@@ -149,8 +187,8 @@
         
         // 2. Folding Tree 생성
         function buildTreeSim() {
-            // ... (Tree 생성 로직 생략, 변경 없음) ...
             const parent = Array(adj.length).fill(null);
+            // groups가 정렬되어 있으므로 첫 번째를 루트로 사용
             const rootId = groups[0].faceId; 
             parent[rootId] = -1;
 
@@ -163,6 +201,7 @@
                 
                 if (adj[f]) {
                      adj[f].forEach(n => {
+                        // n.to가 현재 그룹 목록에 있는지 확인
                         if (parent[n.to] === null && groups.some(g => g.faceId === n.to)) { 
                             parent[n.to] = f;
                             Q.push(n.to);
@@ -176,7 +215,7 @@
         const { parent, order } = buildTreeSim();
         const faces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         
-        // FoldEngine.js에서 사용하는 centerOffset3D 계산 로직을 복제합니다.
+        // centerOffsetSim 계산 (FoldEngine.js 복제)
         let minU = Infinity, maxU = -Infinity;
         let minV = Infinity, maxV = -Infinity;
         for (const f of faces) {
@@ -188,20 +227,6 @@
         const netCenterU = (minU + maxU) / 2;
         const netCenterV = (minV + maxV) / 2;
         const centerOffsetSim = new THREE.Vector3(netCenterU, -netCenterV, 0);
-
-        // [포함된 헬퍼 함수] edgeIndex에 따른 회전축 계산 및 로컬 변환 (FoldEngine 복제)
-        function getAxisAndPointSim(parentFace) { // parentGroup 대신 parentFace 객체만 받도록 변경
-            const parentEdges = getEdges(parentFace);
-            const edge = parentEdges[parentFace.relation.edgeA]; // relation 정보는 adj에서 가져옴
-            
-            const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
-            const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
-            
-            const axis = new THREE.Vector3().subVectors(p2_world, p1_world).normalize();
-            const point = p1_world; 
-
-            return { axis, point };
-        }
 
         try {
             // 3. 동기 Fold 시뮬레이션: 초기화 (unfold)
@@ -217,27 +242,27 @@
 
             order.forEach(faceId => {
                 const p = parent[faceId];
-                if (p === -1) return;
+                if (p === -1) return; // 루트 노드 건너뛰기
 
                 const parentGroup = groups.find(g => g.faceId === p);
                 const childGroup = groups.find(g => g.faceId === faceId);
                 
-                // ⭐ 핵심 안정성 체크: 여기서 `undefined` 오류 발생 방지
-                if (!parentGroup || !childGroup) {
-                    throw new Error(`Parent or child group not found for folding faces ${p} -> ${faceId}`);
-                }
+                // ⭐ 핵심 수정: 그룹이 없으면 다음 루프로 이동 (Uncaught TypeError 방지)
+                if (!parentGroup || !childGroup) return;
 
                 const relation = adj[p].find(x => x.to === faceId);
+                if (!relation) return; // 관계 정보가 없으면 건너뛰기
+                
                 const parentFaceObj = faces.find(f => f.id === p);
-                
-                // 임시로 relation 정보를 Face 객체에 추가
-                parentFaceObj.relation = relation;
-                
-                const { axis, point } = getAxisAndPointSim(parentFaceObj);
+                if (!parentFaceObj) return;
+
+                // getAxisAndPointSim을 루프 밖 헬퍼로 사용
+                const { axis, point } = getAxisAndPointSim(parentFaceObj, relation);
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
                 
+                // --- FoldEngine.js 로직 그대로 복제 ---
                 parentGroup.updateMatrixWorld(true); 
                 childGroup.updateMatrixWorld(true); 
 
@@ -252,12 +277,12 @@
                 
                 childGroup.position.add(localPoint);
                 childGroup.updateMatrix(); 
+                // --- 복제 끝 ---
             });
             
             engine.scene.updateMatrixWorld(true);
 
         } catch (err) {
-            // ⭐ 오류 메시지 출력 후 fail()
             console.warn("Validator Simulate Fold Error:", err);
             return fail("접기 시뮬레이션 중 오류가 발생했습니다: " + err.message);
         }
@@ -274,7 +299,7 @@
     }
 
     // ----------------------------------------------------
-    // (D) overlap 검사
+    // (D) overlap 검사 및 최종 공개 함수 생략 (변경 없음)
     // ----------------------------------------------------
     function checkOverlap() {
         if (!window.Overlap || !window.Overlap.noOverlapCheck) {
@@ -292,9 +317,6 @@
         return true;
     }
 
-    // ----------------------------------------------------
-    // 최종 공개 함수: validateNet
-    // ----------------------------------------------------
     Validator.validateNet = function (net) {
         Validator.lastError = "";
 
@@ -311,5 +333,6 @@
 
         return true;
     };
+
 
 })();

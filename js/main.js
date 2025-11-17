@@ -6,12 +6,13 @@
     "use strict";
 
     // ------------------------------------------------------
-    // ENUMS
+    // ENUMS (UI.js에서 접근 가능하도록 window에 등록)
     // ------------------------------------------------------
     const MAIN_MODE = {
         NET_BUILD: "netBuild",
         OVERLAP_FIND: "overlapFind"
     };
+    window.MAIN_MODE = MAIN_MODE; // UI.js에서 사용하기 위해 노출
 
     const NET_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
 
@@ -41,6 +42,7 @@
     let problems = [];
     let currentIndex = 0;
     let currentProblem = null;
+    window.currentProblem = currentProblem; // UI.js에서 사용하기 위해 노출
 
     let netCanvas, threeCanvas;
 
@@ -57,6 +59,13 @@
         bindProblemButtons();
         bindQRPopup();
 
+        // 초기 선택 버튼 selected 상태 지정
+        document.querySelector("#net-type-group button[data-type='cube']").classList.add("selected");
+        document.querySelector("#net-run-group button[data-run='practice']").classList.add("selected");
+        document.querySelector("#ov-solid-group button[data-solid='cube']").classList.add("selected");
+        document.querySelector("#ov-type-group button[data-type='point']").classList.add("selected");
+        document.querySelector("#ov-run-group button[data-run='practice']").classList.add("selected");
+        
         showPage("mode-select-page");
     }
 
@@ -269,52 +278,55 @@
     // ------------------------------------------------------
     function loadProblem() {
 
-    currentProblem = problems[currentIndex];
-    if (!currentProblem) {
-        showResultPage();
-        return;
-    }
+        currentProblem = problems[currentIndex];
+        window.currentProblem = currentProblem; // UI.js에서 접근 가능하도록 업데이트
+        
+        if (!currentProblem) {
+            showResultPage();
+            return;
+        }
 
-    document.getElementById("btn-next").classList.add("hidden");
-    document.getElementById("btn-check").classList.remove("hidden");
+        document.getElementById("btn-next").classList.add("hidden");
+        document.getElementById("btn-check").classList.remove("hidden");
+        document.getElementById("btn-check").disabled = false; // Check 버튼 활성화
 
-    const title = document.getElementById("problem-title");
-    const idx = currentIndex + 1;
+        const title = document.getElementById("problem-title");
+        const idx = currentIndex + 1;
 
-    if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-        title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
-    } else {
-        title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
-    }
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
+        } else {
+            title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
+        }
 
-    // UI 초기화: 반드시 init → clear 순서
-    UI.init(netCanvas);
-    UI.clear();
+        // UI 초기화: 반드시 init → clear 순서
+        UI.init(netCanvas);
+        UI.clear();
 
-    const opt = {};
-    if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-        opt.removeOne = true;
-        opt.highlightPositions = true;
-    }
+        const opt = {};
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            opt.removeOne = true;
+            opt.highlightPositions = true;
+        }
 
-    // 전개도 렌더링
-    UI.renderNet(currentProblem.net, opt);
+        // 전개도 렌더링
+        UI.renderNet(currentProblem.net, opt);
 
-    // 3D 초기화
-    FoldEngine.init(threeCanvas);
-    FoldEngine.currentNet = currentProblem.net;
-    FoldEngine.loadNet(currentProblem.net);
-    FoldEngine.unfoldImmediate();
+        // 3D 초기화
+        FoldEngine.init(threeCanvas);
+        FoldEngine.currentNet = currentProblem.net;
+        FoldEngine.loadNet(currentProblem.net);
+        FoldEngine.unfoldImmediate();
         setTimeout(() => {
-    FoldEngine.foldAnimate(1);  // 1초 동안 접기
-}, 300);
+            FoldEngine.foldAnimate(1);  // 1초 동안 접기 (문제 로드 시 이미 접힌 상태를 보여줌)
+        }, 300);
 
-    // 겹침 모드라면 Overlap 초기화
-    if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-        Overlap.startSelection(currentProblem.net);
-        Overlap.currentMode = currentProblem.overlapMode;
+        // 겹침 모드라면 Overlap 초기화
+        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+            Overlap.startSelection(currentProblem.net);
+            Overlap.currentMode = currentProblem.overlapMode;
+        }
     }
-}
 
     // ------------------------------------------------------
     // ANSWER CHECK / NEXT
@@ -322,21 +334,48 @@
     function bindProblemButtons() {
 
         document.getElementById("btn-check").addEventListener("click", () => {
-            let correct = false;
+            
+            // 중복 클릭 방지
+            document.getElementById("btn-check").disabled = true;
 
-            if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-                correct = UI.checkPieceResult(currentProblem.net);
-            } else {
-                correct = UI.checkOverlapResult(currentProblem.net);
-            }
+            // 1. 3D 모델을 펼친 상태에서 접는 애니메이션 실행
+            // foldEngine.js 수정으로 Promise를 반환하도록 가정
+            FoldEngine.unfoldImmediate(); 
+            FoldEngine.foldAnimate(1) // 1초 동안 접기
+                .then(() => {
+                    // 2. 애니메이션 완료 후 정답 판정
+                    let correct = false;
 
-            if (correct) {
-                alert("정답입니다!");
-                document.getElementById("btn-check").classList.add("hidden");
-                document.getElementById("btn-next").classList.remove("hidden");
-            } else {
-                alert("틀렸습니다. 다시 시도해보세요!");
-            }
+                    if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+                        correct = UI.checkPieceResult(currentProblem.net);
+                    } else {
+                        correct = UI.checkOverlapResult(currentProblem.net);
+                    }
+
+                    // 3. 결과 팝업 및 다음 문제 준비
+                    if (correct) {
+                        alert("정답입니다! 🎉");
+                        document.getElementById("btn-check").classList.add("hidden");
+                        document.getElementById("btn-next").classList.remove("hidden");
+                    } else {
+                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔");
+                        // 오답 시 다시 체크 가능하게
+                        document.getElementById("btn-check").disabled = false; 
+                        // 3D 모델 다시 펼침
+                        FoldEngine.unfoldImmediate();
+                        
+                        // 겹침 찾기 모드의 경우, 오답 시 선택 초기화
+                        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                            Overlap.startSelection(currentProblem.net);
+                            UI.renderNet(currentProblem.net, {}); // 렌더링 초기화
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error("Fold Animation Error:", err);
+                    alert("정답 확인 중 오류가 발생했습니다.");
+                    document.getElementById("btn-check").disabled = false;
+                });
         });
 
         document.getElementById("btn-next").addEventListener("click", () => {

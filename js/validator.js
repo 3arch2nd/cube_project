@@ -27,6 +27,7 @@
     // (A) Face 기본 검증
     // ----------------------------------------------------
     function validateFaces(net) {
+        // ... (생략: validateFaces 함수는 이전과 동일) ...
         if (!net || !Array.isArray(net.faces)) {
             return fail("전개도 데이터가 올바르지 않습니다.");
         }
@@ -55,6 +56,7 @@
     // 면의 4개 edge의 좌표 (정사각형이 아닌 w,h 반영)
     // ----------------------------------------------------
     function getEdges(f) {
+        // ... (생략: getEdges 함수는 이전과 동일) ...
         const { u, v, w, h } = f;
 
         return [
@@ -87,6 +89,7 @@
     // (B) adjacency 검사
     // ----------------------------------------------------
     function buildAdjacency(net) {
+        // ... (생략: buildAdjacency 함수는 이전과 동일) ...
         const adj = [...Array(6)].map(() => []);
         
         const faces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
@@ -114,7 +117,6 @@
             }
         }
 
-        // 연결 개수 = 5 여야 함
         let totalConnections = 0;
         adj.forEach(a => totalConnections += a.length);
         totalConnections = totalConnections / 2;
@@ -127,6 +129,7 @@
     }
 
     function checkConnectivity(adj) {
+        // ... (생략: checkConnectivity 함수는 이전과 동일) ...
         const facesIds = adj.map((a, id) => a.length > 0 ? id : -1).filter(id => id !== -1);
         if (facesIds.length === 0) return true; 
 
@@ -155,7 +158,6 @@
     // (C) FoldEngine 기반 실제 fold 테스트
     // ----------------------------------------------------
     function simulateFolding(net, adj) {
-        // 별도 가상 FoldEngine 인스턴스
         const dummyCanvas = document.createElement("canvas");
         dummyCanvas.width = 300;
         dummyCanvas.height = 300;
@@ -171,16 +173,14 @@
         
         // --- 가상 Three.js 환경 재구축 (TypeError 방지) ---
         engine.init = function(canvas) {
-            // renderer는 필요 없지만, scene과 camera, light는 필요
             engine.scene = new THREE.Scene();
             engine.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-            engine.camera.position.set(0, 0, 8); // 시점 설정
+            engine.camera.position.set(0, 0, 8); 
             engine.camera.lookAt(new THREE.Vector3(0, 0, 0));
             
             const light = new THREE.DirectionalLight(0xffffff, 1);
             light.position.set(4, 5, 6);
             
-            // ⭐ Scene에 카메라와 라이트 추가: Three.js 계층 구조를 완성
             engine.scene.add(engine.camera);
             engine.scene.add(light);
             engine.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
@@ -232,12 +232,8 @@
                 group.rotation.set(0, 0, 0); 
             });
 
-            // ⭐ World Matrix 업데이트: simulateFolding의 핵심 수정
-            // Scene 자체의 updateMatrixWorld를 호출 (engine.scene은 Three.Scene 인스턴스)
             engine.scene.updateMatrixWorld(true);
             
-            // centerOffset3D는 FoldEngine.js에서 계산되지만, 시뮬레이션 환경에서는 0으로 가정
-            // (loadNet에서 이미 중심을 (0,0,0)으로 이동시켰기 때문)
             const centerOffsetSim = new THREE.Vector3(0,0,0); 
 
             order.forEach(faceId => {
@@ -252,7 +248,7 @@
                 const relation = adj[p].find(x => x.to === faceId);
                 const parentFaceObj = faces.find(f => f.id === p);
                 
-                // getAxisAndPointSim (FoldEngine.js의 getAxisAndPoint 로직)
+                // getAxisAndPointSim 
                 const parentEdges = getEdges(parentFaceObj);
                 const edge = parentEdges[relation.edgeA];
                 
@@ -264,6 +260,9 @@
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
+                // ⭐ 오류 해결: childGroup의 matrixWorld를 명시적으로 업데이트
+                childGroup.updateMatrixWorld(true); 
+
                 const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
@@ -277,7 +276,6 @@
                 childGroup.position.add(localPoint);
             });
             
-            // 최종 위치에 대한 World Matrix 업데이트
             engine.scene.updateMatrixWorld(true);
 
         } catch (err) {
@@ -305,10 +303,8 @@
             return true;
         }
 
-        // FoldEngine의 matrixWorld가 최종 접힌 상태로 업데이트되어 있어야 함
         const groups = window.FoldEngine.getFaceGroups();
         if (groups.length > 0 && groups[0].parent) {
-             // Scene의 updateMatrixWorld 호출
              groups[0].parent.updateMatrixWorld(true);
         }
 

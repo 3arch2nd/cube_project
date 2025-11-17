@@ -20,7 +20,7 @@
     const UNIT = 60; // 한 칸 크기
     const EPS = 1e-6;
     
-    // ⭐ 중앙 정렬을 위한 Offset
+    // 중앙 정렬을 위한 Offset
     let U_OFFSET = 0;
     let V_OFFSET = 0;
 
@@ -79,8 +79,8 @@
         // ① 제거된 face는 그리지 않는다
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                // ⭐ 2. 문제 도형의 테두리 및 내부 선 색상 통일 (#333)
-                drawFace(f, "#eaeaea", "#333");   // 원래 면
+                // ⭐ 1. 문제 도형의 테두리(진한 검정 #333)와 내부 선(연한 #aaa) 구분
+                drawFace(f, "#eaeaea", "#333", "#aaa");   // 원래 면
             }
         }
 
@@ -88,15 +88,13 @@
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
-                    // ⭐ 1. 후보 영역은 굵은 선 없이 모눈과 같도록 설정
-                    drawFaceOutline(c, "#ddd", 1, "#f9f9f9"); // 얇은 모눈 선과 연한 배경
+                    drawFaceOutline(c, "#ddd", 1, "#f9f9f9"); 
                 }
             }
         }
 
         // ③ 사용자가 클릭하여 배치한 위치 (전개도 완성하기)
         if (placed) {
-            // ⭐ 클릭된 영역은 굵은 노란색 테두리 유지
             drawFaceOutline(placed, "#ffc107", 5); 
         }
         
@@ -164,13 +162,11 @@
         ctx.lineWidth = 1;
         
         for (let i = 0; i < maxCells; i++) {
-            // 수직선
             ctx.beginPath();
             ctx.moveTo(i * UNIT, 0);
             ctx.lineTo(i * UNIT, canvas.height);
             ctx.stroke();
 
-            // 수평선
             ctx.beginPath();
             ctx.moveTo(0, i * UNIT);
             ctx.lineTo(canvas.width, i * UNIT);
@@ -184,7 +180,7 @@
     // --------------------------------------
     // face 그리기 – w×h 지원
     // --------------------------------------
-    function drawFace(f, fill, stroke = "#333") { // ⭐ stroke 기본값 설정
+    function drawFace(f, fill, outerStroke = "#333", innerStroke = "#333") { // ⭐ 내부 선 인자 추가
         const x = (f.u + U_OFFSET) * UNIT; 
         const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
@@ -192,8 +188,24 @@
 
         ctx.save();
         ctx.fillStyle = fill;
-        ctx.strokeStyle = stroke; 
-        ctx.lineWidth = 2; // ⭐ 내부 선 굵기 유지
+        
+        // 1. 내부 선 그리기 (테두리 제외)
+        ctx.strokeStyle = innerStroke; 
+        ctx.lineWidth = 1; // 내부 선은 얇게
+        ctx.beginPath();
+        if (f.w > 0) {
+            ctx.moveTo(x + w, y);
+            ctx.lineTo(x + w, y + h);
+        }
+        if (f.h > 0) {
+            ctx.moveTo(x, y + h);
+            ctx.lineTo(x + w, y + h);
+        }
+        ctx.stroke();
+
+        // 2. 테두리 그리기 (전체 면의 외곽)
+        ctx.strokeStyle = outerStroke; 
+        ctx.lineWidth = 2; // 테두리는 굵게
         ctx.beginPath();
         ctx.rect(x, y, w, h);
         ctx.fill();
@@ -462,9 +474,11 @@
         const netClone = JSON.parse(JSON.stringify(net));
         const f = netClone.faces.find(f => f.id === removedFaceId);
         
+        // placed 위치를 복제본에 적용
         f.u = placed.u;
         f.v = placed.v;
         
+        // 2. 오류 수정: 정답 확인 시, 정답을 포함한 완전한 netClone을 로드
         window.FoldEngine.loadNet(netClone);
 
         const result = Validator.validateNet(netClone);

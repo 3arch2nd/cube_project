@@ -15,7 +15,7 @@
     let scene, camera, renderer;
     let faceGroups = [];   // 각 face의 Three.Group
     let parentOf = [];     // folding tree
-    FoldEngine.currentNet = null; // main.js에서 net을 저장하기 위해 추가
+    FoldEngine.currentNet = null; 
 
     const WHITE = 0xffffff;
     const OUTLINE = 0x333333;
@@ -29,19 +29,20 @@
     //  Three.js 초기화
     // ---------------------------------------
     FoldEngine.init = function (canvas) {
-        // 이미 renderer가 있다면 기존 캔버스를 재사용할 수 있도록 체크 (옵션)
         if (!renderer) {
             renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         }
         renderer.setSize(canvas.width, canvas.height);
 
-        // 이전 scene에 있던 객체들 제거 및 scene 초기화
         if (scene) {
+            // 이전 scene에 있던 객체들 제거 및 scene 초기화
             while (scene.children.length > 0) {
                 scene.remove(scene.children[0]);
             }
         } else {
             scene = new THREE.Scene();
+            // FoldEngine.scene을 외부에 노출
+            FoldEngine.scene = scene; 
         }
 
 
@@ -65,8 +66,6 @@
     // face geometry 생성 (w × h)
     // ---------------------------------------
     function createFaceGeometry(w, h) {
-        // 기존 Three.js 버전에서는 Geometry가 Deprecated. BufferGeometry 사용 권장
-        // 그러나 기존 코드 호환성을 위해 Geometry 유지
         const geom = new THREE.Geometry();
 
         const hw = w / 2;
@@ -90,11 +89,10 @@
     // 2D 전개도 → 3D face group 생성
     // ---------------------------------------
     FoldEngine.loadNet = function (net) {
-        FoldEngine.currentNet = net; // net을 저장
+        FoldEngine.currentNet = net; 
 
         // 리셋
         faceGroups = [];
-        // scene에 남아있는 이전 mesh/group 제거
         const objectsToRemove = scene.children.filter(obj => obj.type === 'Group');
         objectsToRemove.forEach(obj => scene.remove(obj));
         
@@ -114,9 +112,6 @@
         const netCenterU = (minU + maxU) / 2;
         const netCenterV = (minV + maxV) / 2;
         
-        // 3D 좌표계: U축(X), V축(Y)은 반대 (상하 반전)
-        // centerOffset3D는 전개도상의 중앙점 좌표를 3D 월드 좌표계 기준으로 변환한 것.
-        // 이 값을 빼면 각 면의 중심이 3D 월드의 (0,0,0) 주변으로 이동한다.
         centerOffset3D.set(netCenterU, -netCenterV, 0);
 
 
@@ -147,16 +142,15 @@
             const faceCenterX = u + w/2;
             const faceCenterY = v + h/2;
             
-            // 초기 위치: 2D 전개도 좌표를 3D 월드 좌표로 변환
             const initialPos = new THREE.Vector3(
                 faceCenterX - netCenterU, 
-                -(faceCenterY - netCenterV), // Y축 반전
+                -(faceCenterY - netCenterV), 
                 0
             );
 
             group.position.copy(initialPos);
             group.updateMatrix(); 
-            group.userData.initialPos = initialPos.clone(); // deep copy
+            group.userData.initialPos = initialPos.clone(); 
             group.userData.netInfo = { w, h, u, v }; 
 
             scene.add(group);
@@ -165,7 +159,8 @@
 
         faceGroups.sort((a, b) => a.faceId - b.faceId);
         
-        scene.updateMatrixWorld(true);
+        // ⭐ 수정: 월드 행렬 업데이트를 여기서 확실히 실행하여 validator가 사용할 수 있도록 보장
+        scene.updateMatrixWorld(true); 
 
         renderer.render(scene, camera);
     };
@@ -204,7 +199,6 @@
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         const maxId = validFaces.reduce((max, f) => Math.max(max, f.id), -1);
         
-        // face id가 0부터 maxId까지 모두 존재한다는 가정 하에 배열 생성
         const adj = [...Array(maxId + 1)].map(() => []);
 
         function edgesOf(f) {
@@ -228,7 +222,6 @@
 
                 for (let ei = 0; ei < 4; ei++) {
                     for (let ej = 0; ej < 4; ej++) {
-                        // sameEdge 로직: E[ei].a == E[ej].b && E[ei].b == E[ej].a
                         if (
                             Math.abs(Ei[ei].a[0] - Ej[ej].b[0]) < EPS && Math.abs(Ei[ei].a[1] - Ej[ej].b[1]) < EPS &&
                             Math.abs(Ei[ei].b[0] - Ej[ej].a[0]) < EPS && Math.abs(Ei[ei].b[1] - Ej[ej].a[1]) < EPS
@@ -254,7 +247,6 @@
         if (maxId < 0 || validIds.length === 0) return { parent: [], order: [] };
 
         const parent = Array(maxId + 1).fill(null);
-        // 그룹이 하나 이상 있을 때, 첫 번째 그룹을 루트로 설정
         const rootId = groups[0].faceId; 
         parent[rootId] = -1; 
 
@@ -267,7 +259,6 @@
 
             if (adj[f]) {
                  adj[f].forEach(n => {
-                    // n.to가 유효한 id인지, 이미 처리되지 않았는지 확인
                     if (parent[n.to] === null && validIds.includes(n.to)) { 
                         parent[n.to] = f;
                         Q.push(n.to);
@@ -288,13 +279,11 @@
         const parentEdges = getEdges(parentInfo);
         const edge = parentEdges[relation.edgeA];
         
-        // 2D 전개도 좌표를 3D World (XY 평면) 좌표로 변환. Y축은 반전.
         const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
         const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
         
-        // 축: p1에서 p2로 향하는 벡터
         const axis = new THREE.Vector3().subVectors(p2_world, p1_world).normalize();
-        const point = p1_world; // 회전의 기준점
+        const point = p1_world; 
 
         return { axis, point };
     }
@@ -313,7 +302,6 @@
         
         if (order.length <= 1) return Promise.resolve();
 
-        // 렌더링 함수가 없으면 시뮬레이션 불가
         if (!renderer) return Promise.resolve();
 
         return new Promise(resolve => {
@@ -328,6 +316,7 @@
                 // 1. 펼친 상태로 초기화
                 FoldEngine.unfoldImmediate(); 
                 
+                // unfoldImmediate에서 scene.updateMatrixWorld(true)가 호출됨.
 
                 order.forEach(faceId => {
                     const p = parent[faceId];
@@ -336,49 +325,32 @@
                     const parentGroup = faceGroups.find(g => g.faceId === p);
                     const childGroup = faceGroups.find(g => g.faceId === faceId);
                     
-                    // ⭐ 안정성 체크 강화: 그룹이 반드시 존재해야 함
                     if (!parentGroup || !childGroup) return; 
 
                     const relation = adj[p].find(x => x.to === faceId);
                     
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
 
-                    // point는 3D 월드 좌표계의 회전 기준점. 
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
                     
-                    // ⭐ 회전 순서가 매우 중요: 부모가 접혀야 자식도 그에 맞춰 접힌다.
-                    
-                    // 1. 자식 그룹의 현재 월드 행렬을 역변환하여 기준점의 로컬 좌표를 찾는다.
+                    // ⭐ 행렬 업데이트 순서 및 호출 (안정화)
+                    parentGroup.updateMatrixWorld(true); 
                     childGroup.updateMatrixWorld(true); 
+
                     const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
-                    // 2. 로컬 좌표를 원점으로 이동 (회전의 중심을 로컬 원점으로)
                     childGroup.position.sub(localPoint);
-                    // ⭐ 여기서 updateMatrixWorld를 다시 호출하면 안 됨. World 행렬을 망가뜨림.
-                    childGroup.updateMatrix(); 
-
-                    // 3. 월드 축을 자식 그룹의 로컬 좌표계로 변환 (회전축)
-                    // 현재 childGroup.matrixWorld가 정확히 업데이트되어 있지 않으므로, parentGroup 기준으로 변환합니다.
-                    // Three.js의 rotateOnAxis는 group.localMatrix 기준으로 동작하므로, 
-                    // 로컬 축을 구하기 위해 `childGroup.matrixWorld.getInverse()`를 사용합니다.
-                    
-                    // 하지만 부모가 이미 월드 좌표계에서 정확히 배치되어 있다면,
-                    // 자식의 로컬 좌표계는 부모와의 연결 상태(펼친 상태의 초기 행렬)를 기준으로 해야 합니다.
-                    // unfoldImmediate가 이미 호출되었으므로, childGroup의 matrixWorld는 펼쳐진 상태를 반영합니다.
                     
                     const localAxis = axis.clone().transformDirection(childGroup.matrixWorld.getInverse());
                     
-                    // 4. 회전 적용
                     childGroup.rotateOnAxis(localAxis, angle);
                     
-                    // 5. 다시 원래 위치로 이동
                     childGroup.position.add(localPoint);
                     childGroup.updateMatrix(); 
                 });
 
-                // scene의 모든 객체의 월드 행렬 업데이트
                 scene.updateMatrixWorld(true);
 
                 renderer.render(scene, camera);

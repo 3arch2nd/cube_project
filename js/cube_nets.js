@@ -10,12 +10,20 @@
  *    - (u, v)는 전개도의 격자 위치 (0 이상 정수)
  *    - 인접 조건: |Δu| + |Δv| === 1 이면 한 변을 공유하는 이웃
  *
- *  구조:
+ *  구조 (기본):
  *    CubeNets.nets         : 모든 전개도 배열
  *    CubeNets.getRandomNet(): 무작위 전개도 하나 반환(깊은 복사)
  *    CubeNets.getNetById(id)
  *    CubeNets.cloneNet(net)
  *    CubeNets.normalizeNet(net) : 회전/대칭 비교용 정규화 키 생성
+ *
+ *  구조 (문제 생성용 – main.js가 호출):
+ *    CubeNets.getRandomPieceProblem()
+ *      -> { kind:"cube-piece", net, removedFaceId }
+ *
+ *    CubeNets.getRandomOverlapProblem(overlapMode?)
+ *      -> { kind:"cube-overlap", net, overlapType }
+ *      // overlapType: 'point' | 'edge'
  */
 
 (function () {
@@ -304,7 +312,7 @@
     }
 
     /**
-     * 외부에서 쓸 수 있는 API 모음
+     * 기본 nets 구성
      */
     const nets = RAW_NETS.map(buildNetFromCells);
 
@@ -330,12 +338,91 @@
         return deepClone(net);
     }
 
+    // ------------------------------------------------------
+    //  문제 생성용 헬퍼
+    // ------------------------------------------------------
+
+    /**
+     * getRandomPieceProblem()
+     *
+     *  - “전개도 완성하기(정육면체)”용 문제 하나 생성
+     *  - 11개 전개도 중 하나를 고르고, faces 중 1개를 제거한 상태로 돌려줌
+     *
+     *  반환 형식(최소 보장):
+     *    {
+     *      kind: "cube-piece",
+     *      net: { id, label, faces, adjacency },
+     *      removedFaceId: number  // 0~5
+     *    }
+     *
+     *  나머지 세부 표현은 ui.js / validator.js / foldEngine.js 에서
+     *  필요에 따라 이 구조 위에 덧칠해서 사용하면 됨.
+     */
+    function getRandomPieceProblem() {
+        const net = getRandomNet();          // 깊은 복사된 전개도
+        if (!net.faces || net.faces.length !== 6) {
+            // 혹시라도 데이터가 깨져 있다면 방어적으로 재검증
+            throw new Error('CubeNets: 잘못된 정육면체 전개도 데이터입니다.');
+        }
+
+        const removeIndex = Math.floor(Math.random() * net.faces.length);
+        const removedFaceId = net.faces[removeIndex].id;
+
+        // UI 쪽에서 전체 net을 쓰되, removedFaceId 를 참고해서
+        // “빈 자리”만 안 그리거나,
+        // 새 조각을 놓게 하는 방식으로 쓸 수 있음.
+        return {
+            kind: 'cube-piece',
+            net,
+            removedFaceId
+        };
+    }
+
+    /**
+     * getRandomOverlapProblem(overlapMode)
+     *
+     *  - “겹쳐지는 부분 찾기(정육면체)”용 문제 하나 생성
+     *  - 우선은 전개도만 무작위로 고르고, 어떤 타입의 문제인지만 넘긴다.
+     *  - 실제로 어떤 점/선이 정답인지 계산하는 건 overlap.js / foldEngine.js 에게 맡긴다.
+     *
+     *  overlapMode:
+     *    'point' | 'edge' | 'both'(기본값)
+     *
+     *  반환 형식(최소 보장):
+     *    {
+     *      kind: "cube-overlap",
+     *      net: { id, label, faces, adjacency },
+     *      overlapType: "point" | "edge"
+     *    }
+     */
+    function getRandomOverlapProblem(overlapMode) {
+        const net = getRandomNet();
+
+        let type;
+        if (overlapMode === 'point' || overlapMode === 'edge') {
+            type = overlapMode;
+        } else {
+            // 'both' 혹은 undefined, 그 외 값이면 랜덤 선택
+            type = Math.random() < 0.5 ? 'point' : 'edge';
+        }
+
+        return {
+            kind: 'cube-overlap',
+            net,
+            overlapType: type
+        };
+    }
+
     // window 전역 네임스페이스에 export
     window.CubeNets = {
         nets,
         getRandomNet,
         getNetById,
         cloneNet,
-        normalizeNet
+        normalizeNet,
+
+        // 문제 생성용
+        getRandomPieceProblem,
+        getRandomOverlapProblem
     };
 })();

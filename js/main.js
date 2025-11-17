@@ -63,7 +63,7 @@
     }
 
     // ------------------------------------------------------
-    // PAGE SWITCH (⭐ 수정됨: 모든 페이지를 명확히 숨기고, 원하는 페이지를 표시)
+    // PAGE SWITCH 
     // ------------------------------------------------------
     function showPage(pageId) {
         const pages = [
@@ -93,12 +93,16 @@
     function bindModeSelectPage() {
         document.getElementById("btn-mode-net").addEventListener("click", () => {
             mainMode = MAIN_MODE.NET_BUILD;
-            showPage("setup-net");
+            document.getElementById("setup-overlap").classList.add("hidden");
+            document.getElementById("mode-select-page").classList.add("hidden");
+            document.getElementById("setup-net").classList.remove("hidden");
         });
 
         document.getElementById("btn-mode-overlap").addEventListener("click", () => {
             mainMode = MAIN_MODE.OVERLAP_FIND;
-            showPage("setup-overlap");
+            document.getElementById("setup-net").classList.add("hidden");
+            document.getElementById("mode-select-page").classList.add("hidden");
+            document.getElementById("setup-overlap").classList.remove("hidden");
         });
     }
 
@@ -106,8 +110,6 @@
     // NET BUILD SETUP PAGE (정육면체 전용)
     // ------------------------------------------------------
     function bindNetSetupPage() {
-
-        // ⭐ 입체 종류 버튼 로직 제거 (항상 정육면체)
 
         document.querySelectorAll("#net-run-group button").forEach(btn => {
             btn.addEventListener("click", () => {
@@ -135,8 +137,6 @@
     // OVERLAP SETUP PAGE (정육면체 전용)
     // ------------------------------------------------------
     function bindOverlapSetupPage() {
-
-        // ⭐ 입체 종류 버튼 로직 제거 (항상 정육면체)
 
         // 겹침 유형
         document.querySelectorAll("#ov-type-group button").forEach(btn => {
@@ -224,9 +224,9 @@
     }
 
     // ------------------------------------------------------
-    // LOAD 1 PROBLEM
+    // LOAD 1 PROBLEM (⭐ Async/Await 적용)
     // ------------------------------------------------------
-    function loadProblem() {
+    async function loadProblem() {
 
         currentProblem = problems[currentIndex];
         window.CubeProject.currentProblem = currentProblem; 
@@ -249,7 +249,7 @@
             title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
         }
 
-        // UI 초기화: 반드시 init → clear 순서
+        // UI 초기화
         UI.init(netCanvas);
         UI.clear();
 
@@ -259,13 +259,12 @@
             opt.highlightPositions = true;
         }
 
-        // 전개도 렌더링 (UI 쪽에서 removedFaceId가 설정됨)
+        // 전개도 렌더링
         UI.renderNet(currentProblem.net, opt);
         
         // 3D 초기화
         FoldEngine.init(threeCanvas);
         
-        // 3D 뷰 초기화: 제거된 조각만 제외하고 5조각만 보이도록 처리
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
         
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
@@ -273,75 +272,93 @@
             const removedFaceIndex = netFor3D.faces.findIndex(f => f.id === removedId);
             
             if (removedFaceIndex !== -1) {
-                // 해당 조각을 배열에서 제거 (5조각만 로드)
                 netFor3D.faces.splice(removedFaceIndex, 1);
             }
         }
         
-        FoldEngine.loadNet(netFor3D);
+        // ⭐ await 추가: loadNet이 Promise를 반환하므로 완료될 때까지 기다림
+        await FoldEngine.loadNet(netFor3D); 
         FoldEngine.unfoldImmediate(); 
         
-        // 겹침 모드라면 Overlap 초기화
         if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
             Overlap.startSelection(currentProblem.net);
-            // Overlap.js에 overlapMode는 필요 없으므로 삭제
         }
     }
 
     // ------------------------------------------------------
-    // ANSWER CHECK / NEXT
+    // ANSWER CHECK / NEXT (⭐ Async/Await 적용)
     // ------------------------------------------------------
     function bindProblemButtons() {
 
-        document.getElementById("btn-check").addEventListener("click", () => {
+        document.getElementById("btn-check").addEventListener("click", async () => { // ⭐ async 추가
             
             document.getElementById("btn-check").disabled = true;
 
-            // 정답 확인 및 FoldEngine 로드
             let correct = false;
+            let netForFold = currentProblem.net;
 
             if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-                // UI.checkPieceResult 내부에서 netClone(정답 포함)을 FoldEngine에 로드
-                correct = UI.checkPieceResult(currentProblem.net);
-            } else {
-                // 겹침 찾기 모드: 현재 문제 net을 FoldEngine에 로드
-                // Overlap.js에서 3D 시뮬레이션을 위해 FoldEngine에 로드해야 할 수도 있으나,
-                // 현재 구조상 Validator에서 loadNet이 호출되거나, UI.checkOverlapResult 내부에
-                // FoldEngine.loadNet이 있어야 합니다.
-                // UI.checkOverlapResult는 Overlap.checkUserAnswer를 호출하며, 이 함수는 FoldEngine.getFaceGroups()를
-                // 통해 3D 위치를 얻습니다. 따라서 겹침 모드에서는 5조각이 아닌 6조각 전체를 로드해야 합니다.
                 
-                // 겹침 찾기 모드에서는 항상 6조각이므로, 현재 net을 FoldEngine에 로드
-                FoldEngine.loadNet(currentProblem.net); // 6조각 전체 로드
-                correct = UI.checkOverlapResult(currentProblem.net);
+                const placedPos = window.UI.placed; 
+                
+                if (placedPos) {
+                    netForFold = JSON.parse(JSON.stringify(currentProblem.net));
+                    const removedId = window.UI.getRemovedFaceId(); 
+                    
+                    let f = netForFold.faces.find(f => f.id === removedId);
+                    if (f) {
+                        f.u = placedPos.u;
+                        f.v = placedPos.v;
+                        f.w = placedPos.w; 
+                        f.h = placedPos.h;
+                    } else {
+                         netForFold.faces.push({ id: removedId, u: placedPos.u, v: placedPos.v, w: placedPos.w, h: placedPos.h });
+                         netForFold.faces.sort((a,b) => a.id - b.id);
+                    }
+                } else {
+                    document.getElementById("btn-check").disabled = false;
+                    alert("조각이 배치되지 않았습니다.");
+                    return;
+                }
+
+                // ⭐ await 추가: 6조각 전체를 로드하고 안정화될 때까지 기다림
+                await FoldEngine.loadNet(netForFold); 
+                
+                // Validator는 동기적으로 실행
+                correct = Validator.validateNet(netForFold); 
+
+            } else { // OVERLAP_FIND 모드
+                // ⭐ await 추가: 6조각 전체를 로드하고 안정화될 때까지 기다림
+                await FoldEngine.loadNet(netForFold); 
+                correct = window.Overlap.checkUserAnswer(netForFold);
             }
+
+            // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
+            FoldEngine.unfoldImmediate(); 
             
             // 오답 시에도 접힘 애니메이션 실행 (학습 효과)
-            FoldEngine.foldAnimate(1) // ⭐ 수정된 foldAnimate 호출
+            FoldEngine.foldAnimate(1) 
                 .then(() => {
                     if (correct) {
                         alert("정답입니다! 🎉");
                         document.getElementById("btn-check").classList.add("hidden");
                         document.getElementById("btn-next").classList.remove("hidden");
                     } else {
-                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔");
+                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔\n" + Validator.lastError); // ⭐ 오류 메시지 추가
                         
                         document.getElementById("btn-check").disabled = false; 
                         
-                        // 오답 시: 잠시 후 다시 펼쳐서 사용자가 재시도할 수 있도록 함
                         setTimeout(() => {
                             FoldEngine.unfoldImmediate();
                             
                             if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-                                // 겹침 문제는 선택 초기화 후 UI 렌더링
                                 Overlap.startSelection(currentProblem.net);
                                 UI.renderNet(currentProblem.net, {}); 
                             } else {
-                                // 전개도 완성하기는 5조각만 다시 보이도록 FoldEngine 재로드
                                 // loadProblem()을 호출하여 5조각 상태로 재설정
                                 loadProblem(); 
                             }
-                        }, 1500); // 1.5초 후 펼치기
+                        }, 1500); 
                     }
                 })
                 .catch(err => {
@@ -371,7 +388,6 @@
     // RESULT PAGE
     // ------------------------------------------------------
     function showResultPage() {
-        // 임시 정답률: 연습 모드에서는 실제 정답 기록이 없으므로 문제 수로 대체
         const correctCount = currentIndex; 
         
         showPage("result-page");

@@ -79,7 +79,6 @@
         // ① 제거된 face는 그리지 않는다
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                // outerStroke (#333, 굵기 2)가 innerStroke (#aaa, 굵기 1)보다 진하게 그려지도록 함
                 drawFace(f, "#eaeaea", "#333", "#aaa");   // 원래 면
             }
         }
@@ -88,15 +87,15 @@
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
-                    // ⭐ 최종 수정: 후보 영역 배경색 제거 (투명하게)
-                    drawFaceOutline(c, "#ddd", 1, 'transparent'); 
+                    // 후보 영역은 얇은 모눈 선 위에 연한 배경
+                    drawFaceOutline(c, "#ddd", 1, "#f9f9f9"); 
                 }
             }
         }
 
         // ③ 사용자가 클릭하여 배치한 위치 (전개도 완성하기)
         if (placed) {
-            drawFaceOutline(placed, "#ffc107", 5, 'transparent'); // 배경은 투명하게
+            drawFaceOutline(placed, "#ffc107", 5); 
         }
         
         // 캔버스 테두리 다시 그리기

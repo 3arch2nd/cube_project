@@ -191,60 +191,63 @@
      *  - dir: 'up' | 'down' | 'left' | 'right'
      */
     function buildNetFromCells(rawNet) {
-        const faces = rawNet.cells.map(([u, v], idx) => ({
-            id: idx,
-            u,
-            v
-        }));
+    const faces = rawNet.cells.map(([u, v], idx) => ({
+        id: idx,
+        u,
+        v,
+        w: 1,   // ⭐ 추가: 정육면체는 한 칸짜리 정사각형
+        h: 1
+    }));
 
-        const adjacency = [];
+    const adjacency = [];
 
-        // 인접한 두 face 찾기
-        for (let i = 0; i < faces.length; i++) {
-            for (let j = i + 1; j < faces.length; j++) {
-                const a = faces[i];
-                const b = faces[j];
-                const du = b.u - a.u;
-                const dv = b.v - a.v;
-                const manhattan = Math.abs(du) + Math.abs(dv);
+    // 인접한 두 face 찾기
+    for (let i = 0; i < faces.length; i++) {
+        for (let j = i + 1; j < faces.length; j++) {
+            const a = faces[i];
+            const b = faces[j];
+            const du = b.u - a.u;
+            const dv = b.v - a.v;
+            const manhattan = Math.abs(du) + Math.abs(dv);
 
-                if (manhattan === 1) {
-                    let dirAB, dirBA;
-                    if (du === 1 && dv === 0) {
-                        dirAB = 'right';
-                        dirBA = 'left';
-                    } else if (du === -1 && dv === 0) {
-                        dirAB = 'left';
-                        dirBA = 'right';
-                    } else if (du === 0 && dv === 1) {
-                        dirAB = 'down';
-                        dirBA = 'up';
-                    } else if (du === 0 && dv === -1) {
-                        dirAB = 'up';
-                        dirBA = 'down';
-                    }
-
-                    adjacency.push({
-                        from: a.id,
-                        to: b.id,
-                        dir: dirAB
-                    });
-                    adjacency.push({
-                        from: b.id,
-                        to: a.id,
-                        dir: dirBA
-                    });
+            if (manhattan === 1) {
+                let dirAB, dirBA;
+                if (du === 1 && dv === 0) {
+                    dirAB = 'right';
+                    dirBA = 'left';
+                } else if (du === -1 && dv === 0) {
+                    dirAB = 'left';
+                    dirBA = 'right';
+                } else if (du === 0 && dv === 1) {
+                    dirAB = 'down';
+                    dirBA = 'up';
+                } else if (du === 0 && dv === -1) {
+                    dirAB = 'up';
+                    dirBA = 'down';
                 }
+
+                adjacency.push({
+                    from: a.id,
+                    to: b.id,
+                    dir: dirAB
+                });
+                adjacency.push({
+                    from: b.id,
+                    to: a.id,
+                    dir: dirBA
+                });
             }
         }
-
-        return {
-            id: rawNet.id,
-            label: rawNet.label,
-            faces,
-            adjacency
-        };
     }
+
+    return {
+        id: rawNet.id,
+        label: rawNet.label,
+        faces,
+        adjacency
+    };
+}
+
 
     /**
      * 전개도 회전/대칭 비교용 정규화:

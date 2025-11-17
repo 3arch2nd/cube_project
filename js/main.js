@@ -5,14 +5,17 @@
 (function () {
     "use strict";
 
+    // 전역 프로젝트 상태 객체 (안정성 강화)
+    window.CubeProject = {};
+
     // ------------------------------------------------------
-    // ENUMS (UI.js에서 접근 가능하도록 window에 등록)
+    // ENUMS (UI.js에서 접근 가능하도록 window.CubeProject에 등록)
     // ------------------------------------------------------
     const MAIN_MODE = {
         NET_BUILD: "netBuild",
         OVERLAP_FIND: "overlapFind"
     };
-    window.MAIN_MODE = MAIN_MODE; // UI.js에서 사용하기 위해 노출
+    window.CubeProject.MAIN_MODE = MAIN_MODE; 
 
     const NET_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
 
@@ -42,7 +45,7 @@
     let problems = [];
     let currentIndex = 0;
     let currentProblem = null;
-    window.currentProblem = currentProblem; // UI.js에서 사용하기 위해 노출
+    window.CubeProject.currentProblem = currentProblem; // UI.js에서 사용하기 위해 노출
 
     let netCanvas, threeCanvas;
 
@@ -232,7 +235,8 @@
         if (overlapSolid === SOLID_TYPE.CUBE) {
             netObj = CubeNets.getRandomOverlapProblem();
         } else if (overlapSolid === SOLID_TYPE.RECT) {
-            netObj = RectPrismNets.getRandomRectOverlapProblem();
+            // RectPrismNets.getRandomRectOverlapProblem()는 이전 단계에서 추가됨
+            netObj = RectPrismNets.getRandomRectOverlapProblem(); 
         } else {
             // BOTH
             if (Math.random() < 0.5)
@@ -279,7 +283,7 @@
     function loadProblem() {
 
         currentProblem = problems[currentIndex];
-        window.currentProblem = currentProblem; // UI.js에서 접근 가능하도록 업데이트
+        window.CubeProject.currentProblem = currentProblem; // UI.js에서 접근 가능하도록 업데이트
         
         if (!currentProblem) {
             showResultPage();
@@ -316,11 +320,10 @@
         FoldEngine.init(threeCanvas);
         FoldEngine.currentNet = currentProblem.net;
         FoldEngine.loadNet(currentProblem.net);
-        FoldEngine.unfoldImmediate();
-        setTimeout(() => {
-            FoldEngine.foldAnimate(1);  // 1초 동안 접기 (문제 로드 시 이미 접힌 상태를 보여줌)
-        }, 300);
-
+        
+        // 1. 오류 수정: 문제 로드 시 전개도가 접히는 코드 삭제 (unfold 상태 유지)
+        FoldEngine.unfoldImmediate(); 
+        
         // 겹침 모드라면 Overlap 초기화
         if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
             Overlap.startSelection(currentProblem.net);
@@ -339,7 +342,6 @@
             document.getElementById("btn-check").disabled = true;
 
             // 1. 3D 모델을 펼친 상태에서 접는 애니메이션 실행
-            // foldEngine.js 수정으로 Promise를 반환하도록 가정
             FoldEngine.unfoldImmediate(); 
             FoldEngine.foldAnimate(1) // 1초 동안 접기
                 .then(() => {

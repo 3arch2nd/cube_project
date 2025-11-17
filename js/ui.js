@@ -87,7 +87,7 @@
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
-                    // 후보 영역은 얇은 모눈 선 위에 연한 배경
+                    // ⭐ 1. 후보 영역의 테두리를 모눈 선과 동일하게 얇고 연하게 설정
                     drawFaceOutline(c, "#ddd", 1, "#f9f9f9"); 
                 }
             }

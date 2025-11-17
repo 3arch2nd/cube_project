@@ -10,10 +10,8 @@
     <meta property="og:url" content="https://cube.3arch2nd.site">
     <meta property="og:type" content="website">
 
-    <!-- 폰트 -->
     <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
 
-    <!-- QRCode 생성 스크립트 -->
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
     <style>
@@ -83,12 +81,21 @@
         .hidden { display:none !important; }
 
         /* 문제 페이지 */
+        .canvas-wrapper {
+            background: #f0f0f0; /* 연한 회색 배경 박스 */
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 20px auto;
+            display: inline-block; /* 캔버스 크기에 맞게 조정 */
+        }
+        
         #net-canvas {
             width:350px;
             height:350px;
             background:white;
             border:2px solid #333;
-            margin: 20px auto;
+            margin: 0 auto; /* wrapper 안에서 중앙 정렬 */
         }
 
         #three-view {
@@ -125,15 +132,12 @@
 
     <h1>입체도형 완전 정복</h1>
 
-    <!-- QR -->
     <button id="qr-btn" class="gray-btn" style="position:fixed; top:20px; right:20px;">
         QR 코드
     </button>
 
-    <!-- 메인 컨테이너 -->
     <div class="container">
 
-        <!-- ========== 1. 모드 선택 페이지 ========== -->
         <div id="mode-select-page">
             <h2>학습 모드를 선택하세요.</h2>
 
@@ -144,12 +148,10 @@
         </div>
 
 
-        <!-- ========== 2-A. 전개도 완성하기 설정 ========== -->
         <div id="setup-net" class="hidden">
 
             <h2>전개도 완성하기 - 설정</h2>
 
-            <!-- 입체 종류 -->
             <div class="section">
                 <h3>입체 종류</h3>
                 <div class="option-row" id="net-type-group">
@@ -159,7 +161,6 @@
                 </div>
             </div>
 
-            <!-- 진행 방식 -->
             <div class="section">
                 <h3>진행 방식</h3>
                 <div class="option-row" id="net-run-group">
@@ -168,7 +169,6 @@
                 </div>
             </div>
 
-            <!-- 문제 개수 -->
             <div class="section">
                 <h3>문제 개수</h3>
                 <div class="option-row">
@@ -182,12 +182,10 @@
         </div>
 
 
-        <!-- ========== 2-B. 겹쳐지는 부분 찾기 설정 ========== -->
-<div id="setup-overlap" class="hidden">
+        <div id="setup-overlap" class="hidden">
 
     <h2>겹쳐지는 부분 찾기 - 설정</h2>
 
-    <!-- (1) 입체 종류 선택 -->
     <div class="section">
         <h3>입체 종류</h3>
         <div class="option-row" id="ov-solid-group">
@@ -197,7 +195,6 @@
         </div>
     </div>
 
-    <!-- (2) 겹침 유형 선택 -->
     <div class="section">
         <h3>겹침 유형</h3>
         <div class="option-row" id="ov-type-group">
@@ -207,7 +204,6 @@
         </div>
     </div>
 
-    <!-- 진행 방식 -->
     <div class="section">
         <h3>진행 방식</h3>
         <div class="option-row" id="ov-run-group">
@@ -216,7 +212,6 @@
         </div>
     </div>
 
-    <!-- 문제 개수 -->
     <div class="section">
         <h3>문제 개수</h3>
         <div class="option-row">
@@ -231,12 +226,14 @@
 </div>
 
 
-        <!-- ========== 3. 문제 페이지 ========== -->
         <div id="problem-page" class="hidden">
 
             <h2 id="problem-title">문제</h2>
 
-            <canvas id="net-canvas" width="350" height="350"></canvas>
+            <div class="canvas-wrapper">
+                <canvas id="net-canvas" width="350" height="350"></canvas>
+            </div>
+            
             <canvas id="three-view" width="350" height="350"></canvas>
 
             <div class="option-row" style="margin-top:20px;">
@@ -248,7 +245,6 @@
         </div>
 
 
-        <!-- ========== 4. 결과 페이지 ========== -->
         <div id="result-page" class="hidden">
 
             <h2>학습 결과</h2>
@@ -263,7 +259,6 @@
     </div>
 
 
-    <!-- ========= QR Pop-up ========= -->
     <div id="qr-popup">
         <div id="qr-box">
             <h3>QR 코드</h3>
@@ -273,10 +268,8 @@
         </div>
     </div>
 
-<!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r100/three.min.js"></script>
 
-<!-- Our JS files -->
 <script src="js/cube_nets.js"></script>
 <script src="js/rect_prism_nets.js"></script>
 <script src="js/foldEngine.js"></script>

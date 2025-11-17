@@ -244,7 +244,7 @@
                 const parentGroup = groups.find(g => g.faceId === p);
                 const childGroup = groups.find(g => g.faceId === faceId);
                 
-                // 안정성 체크: 그룹이 없으면 다음 루프로 이동
+                // 안정성 체크
                 if (!parentGroup || !childGroup) return; 
 
                 const relation = adj[p].find(x => x.to === faceId);
@@ -258,9 +258,9 @@
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
                 
-                // --- FoldEngine.js 로직 그대로 복제 (안정화 포함) ---
+                // --- 행렬 연산 안정화 구간 ---
                 
-                // 1. 로컬 행렬 업데이트
+                // 1. 로컬 행렬 업데이트 (필수)
                 childGroup.updateMatrix(); 
                 parentGroup.updateMatrix(); 
 
@@ -268,10 +268,9 @@
                 parentGroup.updateMatrixWorld(true); 
                 childGroup.updateMatrixWorld(true); 
 
-                // 3. 역행렬 연산 (오류 발생 지점)
-                // childGroup.matrixWorld가 유효한 객체임을 보장한 후 사용
+                // 3. 역행렬 연산 시도 전에 matrixWorld가 유효한지 최종 검사
                 if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
-                     // 100% 방어 로직: 유효하지 않으면 다음으로 이동
+                     // 100% 방어 로직: 유효하지 않으면 다음 단계로 이동
                      console.warn(`MatrixWorld invalid for face ${faceId}. Skipping fold step.`);
                      return; 
                 }

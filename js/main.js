@@ -1,5 +1,5 @@
 /**
- * main.js – Cube + Rectangular Prism + Overlap + NetBuild 통합 관리
+ * main.js – 완전 통합 버전 (전개도 + 겹침 찾기 / cube + rect / point + edge)
  */
 
 (function () {
@@ -13,16 +13,28 @@
         OVERLAP_FIND: "overlapFind"
     };
 
-    const NET_TYPE = { CUBE:"cube", RECT:"rect", BOTH:"both" };
-    const OVERLAP_TYPE = { CUBE:"cube", RECT:"rect", BOTH:"both" };
-    const RUN_MODE = { PRACTICE:"practice", REAL:"real" };
+    const NET_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
+
+    // 겹침 모드 – 입체 종류
+    const SOLID_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
+
+    // 겹침 모드 – 유형(점/선/둘다)
+    const OVERLAP_MODE = { POINT: "point", EDGE: "edge", BOTH: "both" };
+
+    const RUN_MODE = { PRACTICE: "practice", REAL: "real" };
 
     // ------------------------------------------------------
     // 상태 변수
     // ------------------------------------------------------
     let mainMode = null;
+
+    // 전개도
     let netType = NET_TYPE.CUBE;
-    let overlapType = OVERLAP_TYPE.CUBE;
+
+    // 겹침 찾기
+    let overlapSolid = SOLID_TYPE.CUBE;
+    let overlapMode = OVERLAP_MODE.POINT;
+
     let runMode = RUN_MODE.PRACTICE;
     let problemCount = 10;
 
@@ -116,19 +128,33 @@
     }
 
     // ------------------------------------------------------
-    // OVERLAP SETUP PAGE
+    // OVERLAP SETUP PAGE (new version)
     // ------------------------------------------------------
     function bindOverlapSetupPage() {
 
+        // (1) 입체 종류
+        document.querySelectorAll("#ov-solid-group button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#ov-solid-group button")
+                    .forEach(b => b.classList.remove("selected"));
+                btn.classList.add("selected");
+
+                overlapSolid = btn.dataset.solid;
+            });
+        });
+
+        // (2) 겹침 유형
         document.querySelectorAll("#ov-type-group button").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#ov-type-group button")
                     .forEach(b => b.classList.remove("selected"));
                 btn.classList.add("selected");
-                overlapType = btn.dataset.type;
+
+                overlapMode = btn.dataset.type;
             });
         });
 
+        // run mode
         document.querySelectorAll("#ov-run-group button").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#ov-run-group button")
@@ -155,14 +181,14 @@
     // PROBLEM GENERATION
     // ------------------------------------------------------
 
-    // --- 전개도 문제 1개 생성 ---
+    /** 1) 전개도 문제 생성 */
     function generateOneNetProblem() {
 
         if (netType === NET_TYPE.CUBE) {
             const p = CubeNets.getRandomPieceProblem();
             return {
                 mode: MAIN_MODE.NET_BUILD,
-                type: "cube",
+                solid: "cube",
                 net: p.net,
                 dims: null
             };
@@ -172,7 +198,7 @@
             const r = RectPrismNets.getRandomRectNet();
             return {
                 mode: MAIN_MODE.NET_BUILD,
-                type: "rect",
+                solid: "rect",
                 net: r.net,
                 dims: r.dims
             };
@@ -181,36 +207,42 @@
         // BOTH
         if (Math.random() < 0.5) {
             const p = CubeNets.getRandomPieceProblem();
-            return { mode: MAIN_MODE.NET_BUILD, type:"cube", net:p.net, dims:null };
+            return { mode:MAIN_MODE.NET_BUILD, solid:"cube", net:p.net, dims:null };
         } else {
             const r = RectPrismNets.getRandomRectNet();
-            return { mode: MAIN_MODE.NET_BUILD, type:"rect", net:r.net, dims:r.dims };
+            return { mode:MAIN_MODE.NET_BUILD, solid:"rect", net:r.net, dims:r.dims };
         }
     }
 
-    // --- 겹침 문제 생성 ---
+    /** 2) 겹침 문제 생성 */
     function generateOneOverlapProblem() {
-        if (overlapType === OVERLAP_TYPE.CUBE) {
-            const p = CubeNets.getRandomOverlapProblem();
-            return { mode:MAIN_MODE.OVERLAP_FIND, type:"cube", net:p.net, dims:null };
-        }
-        if (overlapType === OVERLAP_TYPE.RECT) {
-            const r = RectPrismNets.getRandomRectOverlapProblem();
-            return { mode:MAIN_MODE.OVERLAP_FIND, type:"rect", net:r.net, dims:r.dims };
+
+        let netObj;
+
+        // (1) 입체 선택
+        if (overlapSolid === SOLID_TYPE.CUBE) {
+            netObj = CubeNets.getRandomOverlapProblem();
+        } else if (overlapSolid === SOLID_TYPE.RECT) {
+            netObj = RectPrismNets.getRandomRectOverlapProblem();
+        } else {
+            // BOTH
+            if (Math.random() < 0.5)
+                netObj = CubeNets.getRandomOverlapProblem();
+            else
+                netObj = RectPrismNets.getRandomRectOverlapProblem();
         }
 
-        // BOTH
-        if (Math.random() < 0.5) {
-            const p = CubeNets.getRandomOverlapProblem();
-            return { mode:"overlapFind", type:"cube", net:p.net, dims:null };
-        } else {
-            const r = RectPrismNets.getRandomRectOverlapProblem();
-            return { mode:"overlapFind", type:"rect", net:r.net, dims:r.dims };
-        }
+        return {
+            mode: MAIN_MODE.OVERLAP_FIND,
+            solid: (netObj.dims ? "rect" : "cube"),
+            net: netObj.net,
+            dims: netObj.dims,
+            overlapMode: overlapMode
+        };
     }
 
     // ------------------------------------------------------
-    // START PROBLEMS
+    // START
     // ------------------------------------------------------
     function startNetProblems() {
         problems = [];
@@ -233,9 +265,10 @@
     }
 
     // ------------------------------------------------------
-    // LOAD PROBLEM
+    // LOAD 1 PROBLEM
     // ------------------------------------------------------
     function loadProblem() {
+
         currentProblem = problems[currentIndex];
         if (!currentProblem) {
             showResultPage();
@@ -246,22 +279,25 @@
         document.getElementById("btn-check").classList.remove("hidden");
 
         const title = document.getElementById("problem-title");
-        title.textContent =
-            currentProblem.mode === MAIN_MODE.NET_BUILD
-                ? `전개도 완성하기 (${currentIndex+1}/${problemCount})`
-                : `겹쳐지는 부분 찾기 (${currentIndex+1}/${problemCount})`;
+        const idx = currentIndex + 1;
+
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
+        } else {
+            title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
+        }
 
         // UI 초기화
         UI.clear();
         UI.init(netCanvas);
 
-        // 전개도 렌더
         const opt = {};
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
             opt.removeOne = true;
             opt.highlightPositions = true;
         }
 
+        // 전개도 렌더링
         UI.renderNet(currentProblem.net, opt);
 
         // 3D 초기화
@@ -269,10 +305,16 @@
         FoldEngine.currentNet = currentProblem.net;
         FoldEngine.loadNet(currentProblem.net);
         FoldEngine.unfoldImmediate();
+
+        // 겹침 모드라면 Overlap 초기화
+        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+            Overlap.startSelection(currentProblem.net);
+            Overlap.currentMode = currentProblem.overlapMode;
+        }
     }
 
     // ------------------------------------------------------
-    // ANSWER CHECK / NEXT / EXIT
+    // ANSWER CHECK / NEXT
     // ------------------------------------------------------
     function bindProblemButtons() {
 
@@ -316,7 +358,11 @@
     function showResultPage() {
         showPage("result-page");
         document.getElementById("result-acc").textContent =
-            `${((currentIndex/problemCount)*100).toFixed(1)}%`;
+            `${((currentIndex / problemCount) * 100).toFixed(1)}%`;
+
+        document.getElementById("btn-restart").onclick = () => {
+            showPage("mode-select-page");
+        };
     }
 
     // ------------------------------------------------------

@@ -17,7 +17,10 @@
     };
     window.CubeProject.MAIN_MODE = MAIN_MODE; 
 
-    // 정육면체 전용이므로 CUBE만 사용
+    // ⭐ 정육면체 전용이므로 NET_TYPE, SOLID_TYPE 등 단순화
+    const NET_TYPE = { CUBE: "cube" }; 
+    const SOLID_TYPE = { CUBE: "cube" };
+
     const OVERLAP_MODE = { POINT: "point", EDGE: "edge", BOTH: "both" };
 
     const RUN_MODE = { PRACTICE: "practice", REAL: "real" };
@@ -26,14 +29,14 @@
     // 상태 변수
     // ------------------------------------------------------
     let mainMode = null;
-    let overlapMode = OVERLAP_MODE.POINT;
+
     let runMode = RUN_MODE.PRACTICE;
     let problemCount = 10;
 
     let problems = [];
     let currentIndex = 0;
     let currentProblem = null;
-    window.CubeProject.currentProblem = currentProblem; // UI.js에서 사용하기 위해 노출
+    window.CubeProject.currentProblem = currentProblem; 
 
     let netCanvas, threeCanvas;
 
@@ -50,7 +53,7 @@
         bindProblemButtons();
         bindQRPopup();
 
-        // 초기 선택 버튼 selected 상태 지정 (정육면체만 남기므로)
+        // 초기 선택 버튼 selected 상태 지정 (정육면체 디폴트)
         document.querySelector("#net-run-group button[data-run='practice']").classList.add("selected");
         document.querySelector("#ov-type-group button[data-type='point']").classList.add("selected");
         document.querySelector("#ov-run-group button[data-run='practice']").classList.add("selected");
@@ -70,32 +73,44 @@
             "result-page"
         ];
 
-        pages.forEach(id => document.getElementById(id).classList.add("hidden"));
-        document.getElementById(pageId).classList.remove("hidden");
+        // ⭐ mode-select-page에서 시작 시 setup-net을 보여주도록 로직 변경
+        if (pageId === "mode-select-page") {
+             document.getElementById("mode-select-page").classList.remove("hidden");
+             document.getElementById("setup-net").classList.add("hidden");
+             document.getElementById("setup-overlap").classList.add("hidden");
+        } else {
+             pages.forEach(id => document.getElementById(id).classList.add("hidden"));
+             document.getElementById(pageId).classList.remove("hidden");
+        }
     }
 
     // ------------------------------------------------------
     // MODE SELECT PAGE
     // ------------------------------------------------------
     function bindModeSelectPage() {
-        // 직육면체 관련 설정 페이지 대신 바로 문제 설정으로 이동
         document.getElementById("btn-mode-net").addEventListener("click", () => {
             mainMode = MAIN_MODE.NET_BUILD;
-            showPage("setup-net"); // 기존 전개도 완성하기 설정 페이지 재사용
+            // setup-net은 기본적으로 hidden이 아니므로 (index.html 참고), 
+            // 다른 페이지를 숨기고 setup-net만 보이도록 처리
+            document.getElementById("setup-overlap").classList.add("hidden");
+            document.getElementById("mode-select-page").classList.add("hidden");
+            document.getElementById("setup-net").classList.remove("hidden");
         });
 
         document.getElementById("btn-mode-overlap").addEventListener("click", () => {
             mainMode = MAIN_MODE.OVERLAP_FIND;
-            showPage("setup-overlap"); // 기존 겹침 찾기 설정 페이지 재사용
+            document.getElementById("setup-net").classList.add("hidden");
+            document.getElementById("mode-select-page").classList.add("hidden");
+            document.getElementById("setup-overlap").classList.remove("hidden");
         });
     }
 
     // ------------------------------------------------------
-    // NET BUILD SETUP PAGE (정육면체 전용으로 변경)
+    // NET BUILD SETUP PAGE (정육면체 전용)
     // ------------------------------------------------------
     function bindNetSetupPage() {
 
-        // ⭐ 입체 종류 선택 그룹 제거 (정육면체 고정)
+        // ⭐ 입체 종류 버튼 로직 제거 (항상 정육면체)
 
         document.querySelectorAll("#net-run-group button").forEach(btn => {
             btn.addEventListener("click", () => {
@@ -120,11 +135,11 @@
     }
 
     // ------------------------------------------------------
-    // OVERLAP SETUP PAGE (정육면체 전용으로 변경)
+    // OVERLAP SETUP PAGE (정육면체 전용)
     // ------------------------------------------------------
     function bindOverlapSetupPage() {
 
-        // ⭐ 입체 종류 선택 그룹 제거 (정육면체 고정)
+        // ⭐ 입체 종류 버튼 로직 제거 (항상 정육면체)
 
         // 겹침 유형
         document.querySelectorAll("#ov-type-group button").forEach(btn => {
@@ -164,25 +179,26 @@
     // PROBLEM GENERATION
     // ------------------------------------------------------
 
-    /** 1) 전개도 문제 생성 (정육면체 고정) */
+    /** 1) 전개도 문제 생성 */
     function generateOneNetProblem() {
         const p = CubeNets.getRandomPieceProblem();
         return {
             mode: MAIN_MODE.NET_BUILD,
             solid: "cube",
             net: p.net,
-            dims: null
+            dims: null // 정육면체이므로 dims 없음
         };
     }
 
-    /** 2) 겹침 문제 생성 (정육면체 고정) */
+    /** 2) 겹침 문제 생성 */
     function generateOneOverlapProblem() {
-        const netObj = CubeNets.getRandomOverlapProblem();
+        const netObj = CubeNets.getRandomOverlapProblem(overlapMode);
+        
         return {
             mode: MAIN_MODE.OVERLAP_FIND,
             solid: "cube",
             net: netObj.net,
-            dims: null,
+            dims: null, // 정육면체이므로 dims 없음
             overlapMode: overlapMode
         };
     }

@@ -194,6 +194,7 @@
         if (groups.length <= 1) return true; 
 
         function buildTreeSim() {
+            // ... (생략: buildTreeSim 함수는 이전과 동일) ...
             const maxId = groups.reduce((max, g) => Math.max(max, g.faceId), -1);
             if (maxId < 0) return { parent: [], order: [] };
             
@@ -232,6 +233,7 @@
                 group.rotation.set(0, 0, 0); 
             });
 
+            // 초기 월드 행렬 업데이트
             engine.scene.updateMatrixWorld(true);
             
             const centerOffsetSim = new THREE.Vector3(0,0,0); 
@@ -260,7 +262,7 @@
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
-                // ⭐ 오류 해결: childGroup의 matrixWorld를 명시적으로 업데이트
+                // ⭐ 오류 해결: childGroup의 matrixWorld를 사용하기 전에 명시적으로 업데이트
                 childGroup.updateMatrixWorld(true); 
 
                 const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
@@ -298,6 +300,7 @@
     // (D) overlap 검사
     // ----------------------------------------------------
     function checkOverlap() {
+        // ... (생략: checkOverlap 함수는 이전과 동일) ...
         if (!window.Overlap || !window.Overlap.noOverlapCheck) {
             console.warn("Overlap 모듈 없음 → 겹침 검사 생략");
             return true;

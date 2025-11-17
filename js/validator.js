@@ -261,21 +261,27 @@
                 // --- 행렬 연산 안정화 구간 ---
                 
                 // 1. 로컬 행렬 업데이트 (필수)
+                // 이 부분이 matrixWorld 업데이트의 선행 조건이 됩니다.
                 childGroup.updateMatrix(); 
                 parentGroup.updateMatrix(); 
 
                 // 2. 월드 행렬 업데이트 (행렬 연산 전 필수)
+                // 이 호출이 three.min.js:331에서 오류를 유발하고 있습니다.
+                // 그러나 계층 구조상 이 호출이 없으면 matrixWorld가 갱신되지 않습니다.
                 parentGroup.updateMatrixWorld(true); 
                 childGroup.updateMatrixWorld(true); 
 
-                // 3. 역행렬 연산 시도 전에 matrixWorld가 유효한지 최종 검사
+                // 3. 역행렬 연산 (오류 발생 지점)
+                // [validator.js:283:90]이 이 주변입니다.
+                
+                // ⭐ 최종 방어 로직: matrixWorld가 유효한 THREE.Matrix4인지 확인
                 if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
                      // 100% 방어 로직: 유효하지 않으면 다음 단계로 이동
                      console.warn(`MatrixWorld invalid for face ${faceId}. Skipping fold step.`);
                      return; 
                 }
 
-                const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
+                const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld); // <--- 여기가 오류 라인 (O.getInverse)
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
                 childGroup.position.sub(localPoint);
@@ -292,8 +298,9 @@
             engine.scene.updateMatrixWorld(true);
 
         } catch (err) {
+            // 이 로그가 콘솔에 찍히지 않고 Uncaught로 터진다면, 방어 로직이 뚫린 것
             console.warn("Validator Simulate Fold Error:", err);
-            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. 행렬 초기화 문제일 가능성 높음.`);
+            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. ${err.message.includes('elements') ? '행렬 객체 초기화 실패' : '알 수 없는 원인'}`);
         }
 
         // 성공적으로 fold되었는지 판단

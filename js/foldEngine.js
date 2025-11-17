@@ -28,7 +28,6 @@
     //  Three.js 초기화
     // ---------------------------------------
     FoldEngine.init = function (canvas) {
-        // ... (생략: init 함수는 이전과 동일) ...
         renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         renderer.setSize(canvas.width, canvas.height);
 
@@ -51,7 +50,6 @@
     // face geometry 생성 (w × h)
     // ---------------------------------------
     function createFaceGeometry(w, h) {
-        // ... (생략: createFaceGeometry 함수는 이전과 동일) ...
         const geom = new THREE.Geometry();
 
         const hw = w / 2;
@@ -75,9 +73,10 @@
     // 2D 전개도 → 3D face group 생성
     // ---------------------------------------
     FoldEngine.loadNet = function (net) {
-        // ... (생략: loadNet 함수는 이전과 동일) ...
         // 리셋
         faceGroups = [];
+        // ⭐ 주의: 기존 scene의 자식 객체들을 모두 제거할 때 카메라와 라이트를 포함한 모든 객체를 제거해야 합니다.
+        // init에서 추가했던 카메라/라이트도 제거되므로, 아래에서 다시 추가해야 합니다.
         while (scene.children.length) scene.remove(scene.children[0]);
 
         // 카메라/빛 재추가
@@ -85,6 +84,8 @@
         light.position.set(4, 5, 6);
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        scene.add(camera); // 카메라를 scene에 다시 추가
+
         
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         
@@ -109,7 +110,7 @@
             const { id, u, v, w, h } = face;
 
             const group = new THREE.Group();
-            group.faceId = id; // ⭐ faceId를 group에 저장
+            group.faceId = id; 
 
             const geom = createFaceGeometry(w, h);
             const mat = new THREE.MeshLambertMaterial({
@@ -125,6 +126,9 @@
 
             group.add(mesh);
             group.add(line);
+            
+            // ⭐ 행렬 자동 업데이트 방지 (수동 업데이트로 통제)
+            group.matrixAutoUpdate = false; 
 
             const faceCenterX = u + w/2;
             const faceCenterY = v + h/2;
@@ -136,6 +140,7 @@
             );
 
             group.position.copy(initialPos);
+            group.updateMatrix(); // 로컬 행렬만 업데이트
             group.userData.initialPos = initialPos;
             group.userData.netInfo = { w, h, u, v }; 
 
@@ -160,7 +165,9 @@
                 group.position.copy(group.userData.initialPos);
             }
             group.setRotationFromEuler(new THREE.Euler(0, 0, 0)); 
+            group.updateMatrix(); // 로컬 행렬 업데이트
         });
+        scene.updateMatrixWorld(true); // 월드 행렬 업데이트
         renderer.render(scene, camera);
     };
 
@@ -168,7 +175,6 @@
     // [포함된 헬퍼 함수] getEdges
     // ---------------------------------------
     function getEdges(f) {
-        // ... (생략) ...
         return [
             { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, 
             { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, 
@@ -290,9 +296,10 @@
                 const progress = Math.min(1, elapsed / duration);
                 const angle = (Math.PI / 2) * progress; 
                 
+                // 1. 펼친 상태로 초기화 (로컬 및 월드 행렬 업데이트 포함)
                 FoldEngine.unfoldImmediate(); 
                 
-                // ⭐ 오류 해결: 애니메이션 루프 내에서 World Matrix 업데이트
+                // ⭐ 오류 해결: 애니메이션 루프 시작 시 World Matrix 업데이트 보장
                 scene.updateMatrixWorld(true);
 
                 order.forEach(faceId => {
@@ -310,13 +317,9 @@
 
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
-                    // ⭐ 오류 해결: childGroup.matrixWorld가 유효한지 확인 후 getInverse 호출
-                    // loadNet에서 scene.updateMatrixWorld(true)를 호출했고, 
-                    // 애니메이션 루프에서도 호출했으므로 matrixWorld는 유효해야 함.
-                    // 만약 이 단계에서도 오류가 난다면, group이 scene에 연결된 후 충분한 시간이 없었거나 
-                    // 계층 구조에 문제가 있는 것.
-                    
-                    childGroup.updateMatrixWorld(true); // 혹시 모를 누락 방지
+                    // ⭐ 오류 해결: 부모 변환 후 자식 변환 직전에 월드 행렬 업데이트
+                    parentGroup.updateMatrixWorld(true);
+                    childGroup.updateMatrixWorld(true); 
 
                     const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
@@ -328,6 +331,7 @@
                     childGroup.rotateOnAxis(localAxis, angle);
                     
                     childGroup.position.add(localPoint);
+                    childGroup.updateMatrix(); // 로컬 행렬 업데이트
                 });
 
                 renderer.render(scene, camera);

@@ -35,8 +35,9 @@
 
         camera = new THREE.PerspectiveCamera(40, canvas.width / canvas.height, 0.1, 100);
         
-        camera.position.set(4, 4, 6); 
-        camera.lookAt(new THREE.Vector3(0, 0, 0));
+        // ⭐ 2. 오류 수정: 3D 뷰 초기 시점 통일 (위에서 내려다보는 시점)
+        camera.position.set(0, 0, 8); // Z축을 높게 설정하여 전개도를 위에서 내려다보게 함
+        camera.lookAt(new THREE.Vector3(0, 0, 0)); // 중심을 바라봄
 
         const light = new THREE.DirectionalLight(0xffffff, 1);
         light.position.set(4, 5, 6);
@@ -83,12 +84,12 @@
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         
+        // 유효한 면만 필터링
+        const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
+        
         // 전개도의 2D 중심 좌표 계산 (3D 시점 중앙 정렬용)
         let minU = Infinity, maxU = -Infinity;
         let minV = Infinity, maxV = -Infinity;
-        
-        // ⭐ 유효한 면만 계산에 포함
-        const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         
         for (const f of validFaces) {
             minU = Math.min(minU, f.u);
@@ -176,7 +177,9 @@
     // [포함된 헬퍼 함수] adjacency 생성
     // ---------------------------------------
     function buildAdjacency(net) {
-        const adj = [...Array(6)].map(() => []);
+        // ⭐ adj 배열의 크기를 faces의 최대 ID에 맞게 조정
+        const maxId = net.faces.filter(f => f).reduce((max, f) => Math.max(max, f.id), -1);
+        const adj = [...Array(maxId + 1)].map(() => []);
 
         function edgesOf(f) {
             return [
@@ -187,7 +190,6 @@
             ];
         }
         
-        // ⭐ 면의 ID는 0부터 5까지라고 가정하지만, net.faces 배열에는 유효한 면만 들어옴.
         const faces = net.faces.filter(f => f); 
 
         for (let i = 0; i < faces.length; i++) {
@@ -218,12 +220,12 @@
     // [포함된 헬퍼 함수] BFS folding tree
     // ---------------------------------------
     function buildTree(adj) {
-        // 면의 최대 ID를 기준으로 parent 배열 크기를 결정 (최대 6개면)
-        const maxId = faceGroups.reduce((max, g) => Math.max(max, g.faceId), -1);
+        const groups = FoldEngine.getFaceGroups();
+        const maxId = groups.reduce((max, g) => Math.max(max, g.faceId), -1);
         if (maxId < 0) return { parent: [], order: [] };
 
         const parent = Array(maxId + 1).fill(null);
-        const rootId = faceGroups[0].faceId; // 항상 첫 번째 그룹을 root로 가정
+        const rootId = groups[0].faceId; 
         parent[rootId] = -1; 
 
         const order = [];
@@ -233,10 +235,9 @@
             const f = Q.shift();
             order.push(f);
 
-            // adj[f]가 정의되어 있는지 확인
             if (adj[f]) {
                  adj[f].forEach(n => {
-                    if (parent[n.to] === null) {
+                    if (parent[n.to] === null && n.to <= maxId) { // 유효한 ID인지 확인
                         parent[n.to] = f;
                         Q.push(n.to);
                     }
@@ -256,9 +257,6 @@
         const parentEdges = getEdges(parentInfo);
         const edge = parentEdges[relation.edgeA];
         
-        // ⭐ 2. 오류 수정: 면의 크기가 0일 경우 TypeError 방지 (이 단계에서는 이미 loadNet에서 필터링되었어야 함)
-        if (!edge) return { axis: new THREE.Vector3(0, 0, 1), point: new THREE.Vector3(0, 0, 0) };
-
         // 격자 좌표를 3D World 좌표로 변환 (u -> X, v -> -Y, Z=0)
         const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
         const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
@@ -281,7 +279,6 @@
         const { parent, order } = buildTree(adj);
         parentOf = parent;
         
-        // ⭐ 2. 오류 수정: 접을 면이 1개 이하일 경우 (root만 존재) 접기 시도 중단
         if (order.length <= 1) return Promise.resolve();
 
         return new Promise(resolve => {
@@ -302,7 +299,7 @@
                     const parentGroup = faceGroups.find(g => g.faceId === p);
                     const childGroup = faceGroups.find(g => g.faceId === faceId);
                     
-                    if (!parentGroup || !childGroup) return; // 면이 로드되지 않았으면 건너뜀
+                    if (!parentGroup || !childGroup) return; 
 
                     const relation = adj[p].find(x => x.to === faceId);
                     

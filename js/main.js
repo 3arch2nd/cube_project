@@ -1,381 +1,309 @@
 // main.js
-// 정육면체 전개도 / 겹치는 부분 찾기 통합 메인 로직
-// 의존: cube_nets.js, foldEngine.js, validator.js, overlap.js, ui.js, three.js
+// ----------------------------------------------
+//  새로운 index.html 구조에 맞춘 전체 메인 로직
+// ----------------------------------------------
 
 (function () {
-    'use strict';
+    "use strict";
 
-    // ------------------------------
+    // ===========================
     // 전역 상태
-    // ------------------------------
-    const PAGES = {
-        MODE: 'mode-selection-page',
-        SETUP: 'setup-page',
-        PROBLEM: 'problem-page',
-        RESULT: 'final-result-page'
+    // ===========================
+    const MAIN_MODE = {
+        NET_BUILD: "netBuild",       // 전개도 완성하기
+        OVERLAP_FIND: "overlapFind"  // 겹쳐지는 부분 찾기
     };
 
-    const PROBLEM_TYPE = {
-        PIECE: 'piece',       // 조각 놓기 (하나 떼어낸 전개도 조각 위치 맞추기)
-        OVERLAP: 'overlap',   // 겹치는 부분 찾기
-        BOTH: 'both'          // 두 유형 섞어서 출제
-    };
+    const NET_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
+    const OVERLAP_TYPE = { POINT: "point", EDGE: "edge", BOTH: "both" };
+    const RUN_MODE = { PRACTICE: "practice", REAL: "real" };
 
-    const GAME_MODE = {
-        CLASSIC: 'classic',
-        TIME_ATTACK: 'timeAttack' // 구조만 남겨두고 필요시 확장
-    };
+    // 현재 설정값
+    let mainMode = null;
+    let netType = NET_TYPE.CUBE;
+    let overlapType = OVERLAP_TYPE.POINT;
+    let runMode = RUN_MODE.PRACTICE;
+    let problemCount = 10;
 
-    let gameMode = GAME_MODE.CLASSIC;
-    let selectedProblemType = PROBLEM_TYPE.PIECE;
-    let totalProblems = 5;
-
-    let problems = [];           // [{ kind: 'piece'|'overlap', net }]
+    // 문제 리스트 & 진행 상태
+    let problems = [];
     let currentIndex = 0;
     let currentProblem = null;
 
-    // 결과 기록: { correct: boolean, attempts: number }
-    let resultLog = [];
+    // Canvas
+    let netCanvas, netCtx, threeCanvas;
 
-    // 화면 요소 참조
-    let netCanvas, netCtx;
-    let threeCanvasOrDiv;
+    // ===========================
+    // 초기 바인딩
+    // ===========================
+    document.addEventListener("DOMContentLoaded", init);
 
-    // 현재 문제에서 정답 시도 횟수
-    let currentAttempts = 0;
+    function init() {
 
-    // ------------------------------
-    // 유틸: 페이지 전환
-    // ------------------------------
-    function showPage(pageIdToShow) {
-        Object.values(PAGES).forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = (id === pageIdToShow) ? 'block' : 'none';
+        netCanvas = document.getElementById("net-canvas");
+        netCtx = netCanvas.getContext("2d");
+        threeCanvas = document.getElementById("three-view");
+
+        bindModeSelectPage();
+        bindNetSetupPage();
+        bindOverlapSetupPage();
+        bindProblemButtons();
+        bindQRPopup();
+
+        showPage("mode-select-page");
+    }
+
+    // ===========================
+    // 페이지 전환
+    // ===========================
+    function showPage(pageId) {
+        const pages = [
+            "mode-select-page",
+            "setup-net",
+            "setup-overlap",
+            "problem-page",
+            "result-page"
+        ];
+
+        pages.forEach(id => {
+            document.getElementById(id).classList.add("hidden");
+        });
+
+        document.getElementById(pageId).classList.remove("hidden");
+    }
+
+    // ===========================
+    // 1. 모드 선택 페이지
+    // ===========================
+    function bindModeSelectPage() {
+        document.getElementById("btn-mode-net").addEventListener("click", () => {
+            mainMode = MAIN_MODE.NET_BUILD;
+            showPage("setup-net");
+        });
+
+        document.getElementById("btn-mode-overlap").addEventListener("click", () => {
+            mainMode = MAIN_MODE.OVERLAP_FIND;
+            showPage("setup-overlap");
         });
     }
 
-    // ------------------------------
-    // 모드 선택 / 설정 관련
-    // ------------------------------
-    function bindModeButtons() {
-        const classicBtn = document.getElementById('classic-mode-btn');
-        const timeAttackBtn = document.getElementById('time-attack-mode-btn');
+    // ===========================
+    // 2-A. 전개도 완성하기 설정
+    // ===========================
+    function bindNetSetupPage() {
 
-        if (classicBtn) {
-            classicBtn.addEventListener('click', () => {
-                gameMode = GAME_MODE.CLASSIC;
-                classicBtn.classList.add('mode-btn-active');
-                if (timeAttackBtn) timeAttackBtn.classList.remove('mode-btn-active');
-                showPage(PAGES.SETUP);
-            });
-        }
+        // 입체 종류 선택
+        document.querySelectorAll("#net-type-group button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#net-type-group button")
+                    .forEach(b => b.classList.remove("selected"));
 
-        if (timeAttackBtn) {
-            // 일단 구조만 맞춰두고, 나중에 실제 타임어택 로직을 넣어도 됨
-            timeAttackBtn.addEventListener('click', () => {
-                gameMode = GAME_MODE.TIME_ATTACK;
-                timeAttackBtn.classList.add('mode-btn-active');
-                if (classicBtn) classicBtn.classList.remove('mode-btn-active');
-                showPage(PAGES.SETUP);
-            });
-        }
-    }
-
-    function bindTypeButtons() {
-        const typeButtons = document.querySelectorAll('#type-select button');
-        typeButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                typeButtons.forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                selectedProblemType = btn.getAttribute('data-type') || PROBLEM_TYPE.PIECE;
+                btn.classList.add("selected");
+                netType = btn.dataset.type;
             });
         });
+
+        // 진행 방식
+        document.querySelectorAll("#net-run-group button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#net-run-group button")
+                    .forEach(b => b.classList.remove("selected"));
+
+                btn.classList.add("selected");
+                runMode = btn.dataset.run;
+            });
+        });
+
+        // 문제 개수
+        const display = document.getElementById("net-q-display");
+        document.getElementById("net-q-minus").addEventListener("click", () => {
+            problemCount = Math.max(1, problemCount - 1);
+            display.textContent = problemCount;
+        });
+        document.getElementById("net-q-plus").addEventListener("click", () => {
+            problemCount = Math.min(50, problemCount + 1);
+            display.textContent = problemCount;
+        });
+
+        // 시작
+        document.getElementById("start-net").addEventListener("click", startNetProblems);
     }
 
-    function bindSetupControls() {
-        // 문제 개수 (클래식 모드 기준, symmetry처럼 +/- 5)
-        const qMinus = document.getElementById('quantity-minus');
-        const qPlus = document.getElementById('quantity-plus');
-        const qDisplay = document.getElementById('problem-quantity');
+    // ===========================
+    // 2-B. 겹쳐지는 부분 찾기 설정
+    // ===========================
+    function bindOverlapSetupPage() {
 
-        if (qDisplay) {
-            totalProblems = parseInt(qDisplay.textContent || '5', 10);
-        }
+        // 유형
+        document.querySelectorAll("#ov-type-group button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#ov-type-group button")
+                    .forEach(b => b.classList.remove("selected"));
 
-        if (qMinus && qPlus && qDisplay) {
-            qMinus.addEventListener('click', () => {
-                let current = parseInt(qDisplay.textContent || '5', 10);
-                current = Math.max(1, current - 5);
-                qDisplay.textContent = current;
-                totalProblems = current;
+                btn.classList.add("selected");
+                overlapType = btn.dataset.type;
             });
-            qPlus.addEventListener('click', () => {
-                let current = parseInt(qDisplay.textContent || '5', 10);
-                current = Math.min(50, current + 5);
-                qDisplay.textContent = current;
-                totalProblems = current;
-            });
-        }
+        });
 
-        const startBtn = document.getElementById('start-quiz-btn');
-        if (startBtn) {
-            startBtn.addEventListener('click', startQuiz);
-        }
+        // 진행 방식
+        document.querySelectorAll("#ov-run-group button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                document.querySelectorAll("#ov-run-group button")
+                    .forEach(b => b.classList.remove("selected"));
 
-        const backBtn = document.getElementById('back-to-mode-select-btn');
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                if (confirm('설정을 취소하고 모드 선택 화면으로 돌아갈까요?')) {
-                    showPage(PAGES.MODE);
-                }
+                btn.classList.add("selected");
+                runMode = btn.dataset.run;
             });
-        }
+        });
+
+        // 문제 수
+        const display = document.getElementById("ov-q-display");
+        document.getElementById("ov-q-minus").addEventListener("click", () => {
+            problemCount = Math.max(1, problemCount - 1);
+            display.textContent = problemCount;
+        });
+        document.getElementById("ov-q-plus").addEventListener("click", () => {
+            problemCount = Math.min(50, problemCount + 1);
+            display.textContent = problemCount;
+        });
+
+        // 시작
+        document.getElementById("start-overlap").addEventListener("click", startOverlapProblems);
     }
 
-    // ------------------------------
+    // ===========================
     // 문제 생성
-    // ------------------------------
-    function createSingleProblem(kind) {
-        if (kind === PROBLEM_TYPE.PIECE) {
-            // cube_nets.js에서 제공하는 API라고 가정
-            const prob = CubeNets.getRandomPieceProblem();
-            return {
-                kind: PROBLEM_TYPE.PIECE,
-                net: prob.net,
-                removedFaceId: prob.removedFaceId
-            };
-        } else if (kind === PROBLEM_TYPE.OVERLAP) {
-            const prob = CubeNets.getRandomOverlapProblem();
-            return {
-                kind: PROBLEM_TYPE.OVERLAP,
-                net: prob.net
-            };
-        }
-        // 기본은 PIECE
-        const prob = CubeNets.getRandomPieceProblem();
-        return {
-            kind: PROBLEM_TYPE.PIECE,
-            net: prob.net,
-            removedFaceId: prob.removedFaceId
-        };
-    }
-
-    function generateProblems() {
+    // ===========================
+    function startNetProblems() {
         problems = [];
-        resultLog = [];
-        currentIndex = 0;
 
-        const count = (gameMode === GAME_MODE.CLASSIC) ? totalProblems : 9999; // 타임어택은 나중에 조정
-
-        for (let i = 0; i < count; i++) {
-            let kind;
-            if (selectedProblemType === PROBLEM_TYPE.BOTH) {
-                kind = (Math.random() < 0.5) ? PROBLEM_TYPE.PIECE : PROBLEM_TYPE.OVERLAP;
-            } else {
-                kind = selectedProblemType;
-            }
-            problems.push(createSingleProblem(kind));
-        }
-    }
-
-    // ------------------------------
-    // 문제 진행
-    // ------------------------------
-    function startQuiz() {
-        generateProblems();
-
-        if (!problems.length) {
-            alert('문제를 생성하지 못했습니다. 다시 시도해 주세요.');
-            return;
+        for (let i = 0; i < problemCount; i++) {
+            // 정육면체 우선
+            const p = CubeNets.getRandomPieceProblem();  
+            problems.push({ mode: MAIN_MODE.NET_BUILD, data: p });
         }
 
-        showPage(PAGES.PROBLEM);
         currentIndex = 0;
-        currentAttempts = 0;
-        loadCurrentProblem();
+        showPage("problem-page");
+        loadProblem();
     }
 
-    function loadCurrentProblem() {
+    function startOverlapProblems() {
+        problems = [];
+
+        for (let i = 0; i < problemCount; i++) {
+            const p = CubeNets.getRandomOverlapProblem();
+            problems.push({ mode: MAIN_MODE.OVERLAP_FIND, data: p });
+        }
+
+        currentIndex = 0;
+        showPage("problem-page");
+        loadProblem();
+    }
+
+    // ===========================
+    // 문제 불러오기
+    // ===========================
+    function loadProblem() {
         currentProblem = problems[currentIndex];
-        currentAttempts = 0;
 
         if (!currentProblem) {
-            showFinalResult();
+            showResultPage();
             return;
         }
 
-        // 문제 번호 / 설명 표시
-        const numberEl = document.getElementById('problem-number');
-        const descEl = document.getElementById('problem-instruction');
+        document.getElementById("btn-next").classList.add("hidden");
+        document.getElementById("btn-check").classList.remove("hidden");
 
-        if (numberEl) {
-            numberEl.textContent = `${currentIndex + 1}번째 문제`;
+        // 문제 제목
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            document.getElementById("problem-title").textContent =
+                `전개도 완성하기 (${currentIndex + 1}/${problemCount})`;
+        } else {
+            document.getElementById("problem-title").textContent =
+                `겹쳐지는 부분 찾기 (${currentIndex + 1}/${problemCount})`;
         }
 
-        if (descEl) {
-            if (currentProblem.kind === PROBLEM_TYPE.PIECE) {
-                descEl.textContent = '전개도의 빈 칸에 알맞은 조각을 놓아, 접었을 때 완전한 정육면체가 되도록 하세요.';
+        // 2D 전개도 초기화
+        UI.clear();
+        UI.init(netCanvas);
+        UI.renderNet(currentProblem.data.net, { removeOne: true, highlightPositions: true });
+
+        // 3D 초기화
+        FoldEngine.init(threeCanvas);
+        FoldEngine.loadNet(currentProblem.data.net);
+        FoldEngine.unfoldImmediate();
+    }
+
+    // ===========================
+    // 문제 버튼
+    // ===========================
+    function bindProblemButtons() {
+        // 정답 확인
+        document.getElementById("btn-check").addEventListener("click", () => {
+            let correct = false;
+
+            if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+                correct = UI.checkPieceResult(currentProblem.data.net);
             } else {
-                descEl.textContent = '정육면체를 접었을 때 서로 맞닿아 겹치게 되는 두 면을 골라 보세요.';
+                correct = UI.checkOverlapResult(currentProblem.data.net);
             }
-        }
 
-        // 2D 전개도 그리기
-        if (netCtx && currentProblem.net) {
-            NetRenderer.drawNet(netCtx, currentProblem.net);
-        }
-
-        // Overlap 모듈 초기화 (2D 상호작용 담당)
-        if (netCanvas && currentProblem.net) {
-            Overlap.reset && Overlap.reset();
-            Overlap.init && Overlap.init(netCanvas, currentProblem.net);
-            Overlap.setMode && Overlap.setMode(currentProblem.kind);
-        }
-
-        // 버튼 초기 상태
-        const checkBtn = document.getElementById('check-answer-btn');
-        const nextBtn = document.getElementById('next-problem-btn');
-
-        if (checkBtn) checkBtn.style.display = 'inline-block';
-        if (nextBtn) nextBtn.style.display = 'none';
-    }
-
-    function checkAnswer() {
-        if (!currentProblem) return;
-
-        let isCorrect = false;
-        if (currentProblem.kind === PROBLEM_TYPE.PIECE) {
-            isCorrect = UI.checkPieceResult(currentProblem.net);
-        } else {
-            isCorrect = UI.checkOverlapResult(currentProblem.net);
-        }
-
-        currentAttempts++;
-
-        // 결과 기록
-        resultLog[currentIndex] = resultLog[currentIndex] || { correct: false, attempts: 0 };
-        if (isCorrect) {
-            if (!resultLog[currentIndex].correct) {
-                resultLog[currentIndex].correct = true;
-                resultLog[currentIndex].attempts = currentAttempts - 1; // 0번 시도면 한 번에 맞춤
-            }
-        }
-
-        // UI 피드백
-        if (isCorrect) {
-            alert('정답입니다! 🎉');
-            const checkBtn = document.getElementById('check-answer-btn');
-            const nextBtn = document.getElementById('next-problem-btn');
-            if (checkBtn) checkBtn.style.display = 'none';
-            if (nextBtn) nextBtn.style.display = 'inline-block';
-        } else {
-            alert('아쉽습니다. 다시 한 번 생각해 보세요!');
-        }
-    }
-
-    function gotoNextProblem() {
-        currentIndex++;
-        if (currentIndex >= problems.length || gameMode === GAME_MODE.TIME_ATTACK) {
-            // 타임어택 모드는 나중에 타이머 종료 기준으로도 끝낼 수 있음
-            showFinalResult();
-        } else {
-            loadCurrentProblem();
-        }
-    }
-
-    // ------------------------------
-    // 접기 애니메이션 버튼
-    // ------------------------------
-    function playFoldAnimation() {
-        if (!currentProblem || !currentProblem.net) return;
-        UI.showFoldedCube(currentProblem.net, () => {
-            // 애니메이션 끝난 뒤 추가로 할 작업이 있으면 여기에
-            // 예: console.log('Fold animation finished');
-        });
-    }
-
-    // ------------------------------
-    // 결과 화면
-    // ------------------------------
-    function showFinalResult() {
-        showPage(PAGES.RESULT);
-
-        const correctCountEl = document.getElementById('correct-count');
-        const retriedCountEl = document.getElementById('retried-count');
-        const accuracyEl = document.getElementById('final-accuracy');
-
-        let correct = 0;
-        let retried = 0;
-        let totalWeighted = 0;
-        let total = resultLog.length;
-
-        resultLog.forEach(r => {
-            if (!r) return;
-            if (r.correct) {
-                if (r.attempts === 0) {
-                    correct++;
-                    totalWeighted += 1;
-                } else {
-                    retried++;
-                    totalWeighted += Math.max(0, 1 - r.attempts * 0.4);
-                }
+            if (correct) {
+                alert("정답입니다! 🎉");
+                document.getElementById("btn-check").classList.add("hidden");
+                document.getElementById("btn-next").classList.remove("hidden");
+            } else {
+                alert("틀렸습니다. 다시 시도해보세요!");
             }
         });
 
-        const accuracy = total ? ((totalWeighted / total) * 100).toFixed(1) : '0.0';
+        // 다음 문제
+        document.getElementById("btn-next").addEventListener("click", () => {
+            currentIndex++;
+            if (currentIndex >= problems.length) {
+                showResultPage();
+            } else {
+                loadProblem();
+            }
+        });
 
-        if (correctCountEl) correctCountEl.textContent = correct;
-        if (retriedCountEl) retriedCountEl.textContent = retried;
-        if (accuracyEl) accuracyEl.textContent = `${accuracy}%`;
+        // 종료
+        document.getElementById("btn-exit").addEventListener("click", () => {
+            if (confirm("학습을 종료하고 처음으로 돌아갈까요?")) {
+                showPage("mode-select-page");
+            }
+        });
     }
 
-    // ------------------------------
-    // 다시 시작
-    // ------------------------------
-    function bindResultButtons() {
-        const restartBtn = document.getElementById('restart-btn');
-        if (restartBtn) {
-            restartBtn.addEventListener('click', () => {
-                if (confirm('다시 처음부터 시작할까요?')) {
-                    problems = [];
-                    resultLog = [];
-                    currentIndex = 0;
-                    currentProblem = null;
-                    showPage(PAGES.MODE);
-                }
+    // ===========================
+    // 결과 페이지
+    // ===========================
+    function showResultPage() {
+        showPage("result-page");
+        document.getElementById("result-acc").textContent =
+            `${((currentIndex / problemCount) * 100).toFixed(1)}%`;
+    }
+
+    // ===========================
+    // QR POPUP
+    // ===========================
+    function bindQRPopup() {
+        document.getElementById("qr-btn").addEventListener("click", () => {
+            document.getElementById("qr-popup").style.display = "flex";
+            const holder = document.getElementById("qr-holder");
+            holder.innerHTML = "";
+
+            new QRCode(holder, {
+                text: "https://cube.3arch2nd.site",
+                width: 180,
+                height: 180,
             });
-        }
+        });
+
+        document.getElementById("qr-close").addEventListener("click", () => {
+            document.getElementById("qr-popup").style.display = "none";
+        });
     }
 
-    // ------------------------------
-    // 메인 초기화
-    // ------------------------------
-    function init() {
-        netCanvas = document.getElementById('net-canvas');
-        threeCanvasOrDiv = document.getElementById('three-view');
-
-        if (netCanvas) {
-            netCtx = netCanvas.getContext('2d');
-        }
-
-        // UI 및 이벤트 바인딩
-        bindModeButtons();
-        bindTypeButtons();
-        bindSetupControls();
-        bindResultButtons();
-
-        // 채점 버튼 / 다음 문제 버튼 / 접기 애니메이션 버튼
-        const checkBtn = document.getElementById('check-answer-btn');
-        const nextBtn = document.getElementById('next-problem-btn');
-        const foldBtn = document.getElementById('fold-anim-btn');
-
-        if (checkBtn) checkBtn.addEventListener('click', checkAnswer);
-        if (nextBtn) nextBtn.addEventListener('click', gotoNextProblem);
-        if (foldBtn) foldBtn.addEventListener('click', playFoldAnimation);
-
-        // 첫 화면은 모드 선택
-        showPage(PAGES.MODE);
-    }
-
-    document.addEventListener('DOMContentLoaded', init);
 })();

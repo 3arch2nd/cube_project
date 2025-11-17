@@ -35,7 +35,6 @@
         renderer.setSize(canvas.width, canvas.height);
 
         if (scene) {
-            // 이전 scene에 있던 객체들 제거 및 scene 초기화
             while (scene.children.length > 0) {
                 scene.remove(scene.children[0]);
             }
@@ -86,7 +85,7 @@
     }
 
     // ---------------------------------------
-    // 2D 전개도 → 3D face group 생성
+    // 2D 전개도 → 3D face group 생성 (⭐ Promise 반환)
     // ---------------------------------------
     FoldEngine.loadNet = function (net) {
         FoldEngine.currentNet = net; 
@@ -159,10 +158,16 @@
 
         faceGroups.sort((a, b) => a.faceId - b.faceId);
         
-        // 월드 행렬 업데이트를 확실히 실행하여 validator가 사용할 수 있도록 보장
-        scene.updateMatrixWorld(true); 
-
-        renderer.render(scene, camera);
+        // Scene과 Groups를 DOM에 로드하고 렌더링 파이프라인이 돌 때까지 기다립니다.
+        return new Promise(resolve => {
+            scene.updateMatrixWorld(true); 
+            renderer.render(scene, camera); 
+            
+            // requestAnimationFrame을 사용하여 다음 프레임까지 기다려 Three.js가 행렬을 안정화할 시간을 줍니다.
+            requestAnimationFrame(() => {
+                resolve();
+            });
+        });
     };
 
     // ---------------------------------------
@@ -316,8 +321,6 @@
                 // 1. 펼친 상태로 초기화
                 FoldEngine.unfoldImmediate(); 
                 
-                // unfoldImmediate에서 scene.updateMatrixWorld(true)가 호출됨.
-
                 order.forEach(faceId => {
                     const p = parent[faceId];
                     if (p === -1) return; 
@@ -328,7 +331,7 @@
                     if (!parentGroup || !childGroup) return; 
 
                     const relation = adj[p].find(x => x.to === faceId);
-                    if (!relation) return; // 관계 정보 누락 방지
+                    if (!relation) return; 
                     
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
 
@@ -337,15 +340,12 @@
                     
                     // ⭐ 행렬 업데이트 순서 및 호출 (안정화)
                     
-                    // 1. 로컬 행렬을 먼저 업데이트하고
                     childGroup.updateMatrix(); 
                     parentGroup.updateMatrix(); 
 
-                    // 2. 월드 행렬을 계산합니다.
                     parentGroup.updateMatrixWorld(true); 
                     childGroup.updateMatrixWorld(true); 
 
-                    // 3. 역행렬 연산
                     const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 

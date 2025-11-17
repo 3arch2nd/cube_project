@@ -269,49 +269,49 @@
     // ------------------------------------------------------
     function loadProblem() {
 
-        currentProblem = problems[currentIndex];
-        if (!currentProblem) {
-            showResultPage();
-            return;
-        }
-
-        document.getElementById("btn-next").classList.add("hidden");
-        document.getElementById("btn-check").classList.remove("hidden");
-
-        const title = document.getElementById("problem-title");
-        const idx = currentIndex + 1;
-
-        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-            title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
-        } else {
-            title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
-        }
-
-        // UI 초기화
-        UI.clear();
-        UI.init(netCanvas);
-
-        const opt = {};
-        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-            opt.removeOne = true;
-            opt.highlightPositions = true;
-        }
-
-        // 전개도 렌더링
-        UI.renderNet(currentProblem.net, opt);
-
-        // 3D 초기화
-        FoldEngine.init(threeCanvas);
-        FoldEngine.currentNet = currentProblem.net;
-        FoldEngine.loadNet(currentProblem.net);
-        FoldEngine.unfoldImmediate();
-
-        // 겹침 모드라면 Overlap 초기화
-        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-            Overlap.startSelection(currentProblem.net);
-            Overlap.currentMode = currentProblem.overlapMode;
-        }
+    currentProblem = problems[currentIndex];
+    if (!currentProblem) {
+        showResultPage();
+        return;
     }
+
+    document.getElementById("btn-next").classList.add("hidden");
+    document.getElementById("btn-check").classList.remove("hidden");
+
+    const title = document.getElementById("problem-title");
+    const idx = currentIndex + 1;
+
+    if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+        title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
+    } else {
+        title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
+    }
+
+    // UI 초기화: 반드시 init → clear 순서
+    UI.init(netCanvas);
+    UI.clear();
+
+    const opt = {};
+    if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+        opt.removeOne = true;
+        opt.highlightPositions = true;
+    }
+
+    // 전개도 렌더링
+    UI.renderNet(currentProblem.net, opt);
+
+    // 3D 초기화
+    FoldEngine.init(threeCanvas);
+    FoldEngine.currentNet = currentProblem.net;
+    FoldEngine.loadNet(currentProblem.net);
+    FoldEngine.unfoldImmediate();
+
+    // 겹침 모드라면 Overlap 초기화
+    if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+        Overlap.startSelection(currentProblem.net);
+        Overlap.currentMode = currentProblem.overlapMode;
+    }
+}
 
     // ------------------------------------------------------
     // ANSWER CHECK / NEXT

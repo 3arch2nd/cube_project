@@ -130,7 +130,7 @@
 
 <body>
 
-    <h1>입체도형 완전 정복</h1>
+    <h1>입체도형 완전 정복 (정육면체 전용)</h1>
 
     <button id="qr-btn" class="gray-btn" style="position:fixed; top:20px; right:20px;">
         QR 코드
@@ -148,16 +148,13 @@
         </div>
 
 
-        <div id="setup-net" class="hidden">
+        <div id="setup-net">
+            <h2>전개도 완성하기 (정육면체) - 설정</h2>
 
-            <h2>전개도 완성하기 - 설정</h2>
-
-            <div class="section">
+            <div class="section hidden">
                 <h3>입체 종류</h3>
                 <div class="option-row" id="net-type-group">
-                    <button data-type="cube" class="gray-btn">정육면체</button>
-                    <button data-type="rect" class="gray-btn">직육면체</button>
-                    <button data-type="both" class="gray-btn">둘 다</button>
+                    <button data-type="cube" class="gray-btn selected">정육면체</button>
                 </div>
             </div>
 
@@ -184,50 +181,47 @@
 
         <div id="setup-overlap" class="hidden">
 
-    <h2>겹쳐지는 부분 찾기 - 설정</h2>
+            <h2>겹쳐지는 부분 찾기 (정육면체) - 설정</h2>
 
-    <div class="section">
-        <h3>입체 종류</h3>
-        <div class="option-row" id="ov-solid-group">
-            <button data-solid="cube" class="gray-btn">정육면체</button>
-            <button data-solid="rect" class="gray-btn">직육면체</button>
-            <button data-solid="both" class="gray-btn">둘 다</button>
+            <div class="section hidden">
+                <h3>입체 종류</h3>
+                <div class="option-row" id="ov-solid-group">
+                    <button data-solid="cube" class="gray-btn selected">정육면체</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>겹침 유형</h3>
+                <div class="option-row" id="ov-type-group">
+                    <button data-type="point" class="gray-btn">점</button>
+                    <button data-type="edge" class="gray-btn">선분</button>
+                    <button data-type="both" class="gray-btn">둘 다</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>진행 방식</h3>
+                <div class="option-row" id="ov-run-group">
+                    <button data-run="practice" class="gray-btn">연습</button>
+                    <button data-run="real" class="gray-btn">실전</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>문제 개수</h3>
+                <div class="option-row">
+                    <button class="gray-btn" id="ov-q-minus">-</button>
+                    <span id="ov-q-display" style="font-size:22px; margin:0 10px;">10</span>
+                    <button class="gray-btn" id="ov-q-plus">+</button>
+                </div>
+            </div>
+
+            <button id="start-overlap" class="orange-btn" style="margin-top:20px;">문제 시작하기</button>
+
         </div>
-    </div>
-
-    <div class="section">
-        <h3>겹침 유형</h3>
-        <div class="option-row" id="ov-type-group">
-            <button data-type="point" class="gray-btn">점</button>
-            <button data-type="edge" class="gray-btn">선분</button>
-            <button data-type="both" class="gray-btn">둘 다</button>
-        </div>
-    </div>
-
-    <div class="section">
-        <h3>진행 방식</h3>
-        <div class="option-row" id="ov-run-group">
-            <button data-run="practice" class="gray-btn">연습</button>
-            <button data-run="real" class="gray-btn">실전</button>
-        </div>
-    </div>
-
-    <div class="section">
-        <h3>문제 개수</h3>
-        <div class="option-row">
-            <button class="gray-btn" id="ov-q-minus">-</button>
-            <span id="ov-q-display" style="font-size:22px; margin:0 10px;">10</span>
-            <button class="gray-btn" id="ov-q-plus">+</button>
-        </div>
-    </div>
-
-    <button id="start-overlap" class="orange-btn" style="margin-top:20px;">문제 시작하기</button>
-
-</div>
 
 
         <div id="problem-page" class="hidden">
-
             <h2 id="problem-title">문제</h2>
 
             <div class="canvas-wrapper">
@@ -241,20 +235,17 @@
                 <button id="btn-next" class="orange-btn hidden">다음 문제</button>
                 <button id="btn-exit" class="red-btn">종료</button>
             </div>
-
-        </div>
+            </div>
 
 
         <div id="result-page" class="hidden">
-
             <h2>학습 결과</h2>
             <p>정답률: <span id="result-acc"></span></p>
 
             <button id="btn-restart" class="green-btn" style="margin-top:20px;">
                 처음으로 돌아가기
             </button>
-
-        </div>
+            </div>
 
     </div>
 
@@ -271,7 +262,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r100/three.min.js"></script>
 
 <script src="js/cube_nets.js"></script>
-<script src="js/rect_prism_nets.js"></script>
 <script src="js/foldEngine.js"></script>
 <script src="js/validator.js"></script>
 <script src="js/overlap.js"></script>

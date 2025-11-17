@@ -167,22 +167,16 @@
     // ----------------------------------------------------
     function simulateFolding(net, adj) {
         
-        const dummyCanvas = document.createElement("canvas");
-        dummyCanvas.width = 300;
-        dummyCanvas.height = 300;
-        
         const engine = window.FoldEngine;
         
-        if (!engine.init || !engine.loadNet || !engine.getFaceGroups || !engine.scene) {
-            return fail("FoldEngine 모듈이 올바르지 않거나 초기화되지 않았습니다.");
+        if (!engine.getFaceGroups || !engine.scene) {
+            return fail("FoldEngine 모듈이 올바르게 로드되지 않았습니다.");
         }
         
-        // 1. FoldEngine 초기화 및 로드 
-        engine.init(dummyCanvas); 
-        engine.loadNet(net); 
-
         const groups = engine.getFaceGroups();
-        if (groups.length !== 6) return fail("시뮬레이션 로드 실패: 면 개수 오류");
+        if (groups.length !== 6) {
+             return fail("시뮬레이션 로드 실패: 6개의 면 그룹이 준비되지 않았습니다.");
+        }
         
         // 2. Folding Tree 생성
         function buildTreeSim() {
@@ -231,12 +225,6 @@
                 group.position.copy(group.userData.initialPos);
                 group.rotation.set(0, 0, 0); 
                 group.updateMatrix(); 
-                
-                // ⭐ 최종 방어: matrixWorld가 확실히 Matrix4 객체임을 보장
-                if (!group.matrixWorld || !group.matrixWorld.elements) {
-                    group.matrixWorld = new THREE.Matrix4();
-                    group.matrixWorldNeedsUpdate = true;
-                }
             });
 
             engine.scene.updateMatrixWorld(true); 
@@ -264,7 +252,7 @@
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
                 
-                // --- 행렬 연산 안정화 구간 ---
+                // --- 행렬 연산 구간 ---
                 
                 // 1. 로컬 행렬 업데이트
                 childGroup.updateMatrix(); 
@@ -275,10 +263,9 @@
                 childGroup.updateMatrixWorld(true); 
 
                 // 3. 역행렬 연산 (오류 발생 지점)
-                // [validator.js:289:90]이 이 주변입니다.
-                
+                // 비동기 대기 후에도 유효하지 않다면 Three.js 내부 문제이므로 방어 코드 유지
                 if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
-                     console.warn(`MatrixWorld still invalid after update for face ${faceId}. Skipping.`);
+                     console.warn(`MatrixWorld invalid for face ${faceId}. Skipping fold step.`);
                      return; 
                 }
 
@@ -300,7 +287,7 @@
 
         } catch (err) {
             console.warn("Validator Simulate Fold Error:", err);
-            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. (Line 289 주변)`);
+            return fail(`접기 시뮬레이션 중 치명적 오류: ${err.message}. (비동기 처리 후에도 오류 발생)`);
         }
 
         // 성공적으로 fold되었는지 판단

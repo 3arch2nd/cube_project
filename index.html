@@ -183,42 +183,52 @@
 
 
         <!-- ========== 2-B. 겹쳐지는 부분 찾기 설정 ========== -->
-        <div id="setup-overlap" class="hidden">
+<div id="setup-overlap" class="hidden">
 
-            <h2>겹쳐지는 부분 찾기 - 설정</h2>
+    <h2>겹쳐지는 부분 찾기 - 설정</h2>
 
-            <!-- 유형 -->
-            <div class="section">
-                <h3>유형 선택</h3>
-                <div class="option-row" id="ov-type-group">
-                    <button data-type="point" class="gray-btn">점</button>
-                    <button data-type="edge" class="gray-btn">선분</button>
-                    <button data-type="both" class="gray-btn">둘 다</button>
-                </div>
-            </div>
-
-            <!-- 진행 방식 -->
-            <div class="section">
-                <h3>진행 방식</h3>
-                <div class="option-row" id="ov-run-group">
-                    <button data-run="practice" class="gray-btn">연습</button>
-                    <button data-run="real" class="gray-btn">실전</button>
-                </div>
-            </div>
-
-            <!-- 문제 개수 -->
-            <div class="section">
-                <h3>문제 개수</h3>
-                <div class="option-row">
-                    <button class="gray-btn" id="ov-q-minus">-</button>
-                    <span id="ov-q-display" style="font-size:22px; margin:0 10px;">10</span>
-                    <button class="gray-btn" id="ov-q-plus">+</button>
-                </div>
-            </div>
-
-            <button id="start-overlap" class="orange-btn" style="margin-top:20px;">문제 시작하기</button>
-
+    <!-- (1) 입체 종류 선택 -->
+    <div class="section">
+        <h3>입체 종류</h3>
+        <div class="option-row" id="ov-solid-group">
+            <button data-solid="cube" class="gray-btn">정육면체</button>
+            <button data-solid="rect" class="gray-btn">직육면체</button>
+            <button data-solid="both" class="gray-btn">둘 다</button>
         </div>
+    </div>
+
+    <!-- (2) 겹침 유형 선택 -->
+    <div class="section">
+        <h3>겹침 유형</h3>
+        <div class="option-row" id="ov-type-group">
+            <button data-type="point" class="gray-btn">점</button>
+            <button data-type="edge" class="gray-btn">선분</button>
+            <button data-type="both" class="gray-btn">둘 다</button>
+        </div>
+    </div>
+
+    <!-- 진행 방식 -->
+    <div class="section">
+        <h3>진행 방식</h3>
+        <div class="option-row" id="ov-run-group">
+            <button data-run="practice" class="gray-btn">연습</button>
+            <button data-run="real" class="gray-btn">실전</button>
+        </div>
+    </div>
+
+    <!-- 문제 개수 -->
+    <div class="section">
+        <h3>문제 개수</h3>
+        <div class="option-row">
+            <button class="gray-btn" id="ov-q-minus">-</button>
+            <span id="ov-q-display" style="font-size:22px; margin:0 10px;">10</span>
+            <button class="gray-btn" id="ov-q-plus">+</button>
+        </div>
+    </div>
+
+    <button id="start-overlap" class="orange-btn" style="margin-top:20px;">문제 시작하기</button>
+
+</div>
 
 
         <!-- ========== 3. 문제 페이지 ========== -->

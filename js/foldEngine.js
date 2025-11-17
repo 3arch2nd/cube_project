@@ -41,7 +41,7 @@
             }
         } else {
             scene = new THREE.Scene();
-            // FoldEngine.scene을 외부에 노출
+            // validator.js가 scene에 접근할 수 있도록 노출
             FoldEngine.scene = scene; 
         }
 
@@ -159,7 +159,7 @@
 
         faceGroups.sort((a, b) => a.faceId - b.faceId);
         
-        // ⭐ 수정: 월드 행렬 업데이트를 여기서 확실히 실행하여 validator가 사용할 수 있도록 보장
+        // 월드 행렬 업데이트를 확실히 실행하여 validator가 사용할 수 있도록 보장
         scene.updateMatrixWorld(true); 
 
         renderer.render(scene, camera);
@@ -328,6 +328,7 @@
                     if (!parentGroup || !childGroup) return; 
 
                     const relation = adj[p].find(x => x.to === faceId);
+                    if (!relation) return; // 관계 정보 누락 방지
                     
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
 
@@ -335,9 +336,16 @@
                     
                     
                     // ⭐ 행렬 업데이트 순서 및 호출 (안정화)
+                    
+                    // 1. 로컬 행렬을 먼저 업데이트하고
+                    childGroup.updateMatrix(); 
+                    parentGroup.updateMatrix(); 
+
+                    // 2. 월드 행렬을 계산합니다.
                     parentGroup.updateMatrixWorld(true); 
                     childGroup.updateMatrixWorld(true); 
 
+                    // 3. 역행렬 연산
                     const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
@@ -363,7 +371,7 @@
                 }
             };
             
-            animationFrameId = requestAnimationFrame(animate);
+            requestAnimationFrame(animate);
         });
     };
 

@@ -1,12 +1,5 @@
 /**
- * ui.js
- * ------------------------------------------
- * 새로운 index + main.js 구조에 맞는 UI 모듈
- * - 전개도 그리기(2D)
- * - 조각 배치 기능(removeOne)
- * - click → placement
- * - 겹침 문제는 Overlap.js가 직접 처리 (UI는 관여 X)
- * ------------------------------------------
+ * ui.js – Cube + Rectangular Prism 전개도 완전 지원 버전
  */
 
 (function () {
@@ -18,23 +11,17 @@
     // 상태
     let canvas = null;
     let ctx = null;
+
     let currentNet = null;
     let removedFaceId = null;
-    let candidatePositions = [];
+    let candidatePositions = [];     // {u,v, edgeIndexParent, edgeIndexRemoved}
     let placed = null;
 
-    const FACE_SIZE = 80;
-    const COLORS = {
-        empty: "#ffffff",
-        face: "#e0e0e0",
-        border: "#333",
-        highlight: "#ffd966",
-        candidate: "#b6d7a8"
-    };
+    const UNIT = 60; // 한 칸 크기
 
-    // ===============================
-    // 초기화 및 초기 상태
-    // ===============================
+    // --------------------------------------
+    // 초기화
+    // --------------------------------------
     UI.init = function (canvasElement) {
         canvas = canvasElement;
         ctx = canvas.getContext("2d");
@@ -43,221 +30,230 @@
     };
 
     UI.clear = function () {
-        if (!ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
         currentNet = null;
         removedFaceId = null;
         candidatePositions = [];
         placed = null;
     };
 
-    // ===============================
-    // 전개도 렌더링
-    // ===============================
+    // --------------------------------------
+    // net 렌더링 (w×h 지원)
+    // --------------------------------------
     UI.renderNet = function (net, options = {}) {
-        /**
-         * options:
-         *   removeOne: true/false
-         *   highlightPositions: true/false
-         */
-        currentNet = JSON.parse(JSON.stringify(net));
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // face 하나 제거 처리
+        currentNet = JSON.parse(JSON.stringify(net));
+
         if (options.removeOne) {
-            if (removedFaceId === null) {
-                removedFaceId = pickLeafFace(currentNet);
-                computeCandidatePositions(currentNet, removedFaceId);
-            }
-        } else {
-            removedFaceId = null;
-            candidatePositions = [];
+            if (removedFaceId == null) removedFaceId = pickRemovableFace(net);
+            computeCandidatePositions(currentNet);
         }
 
-        // face 그리기
-        currentNet.faces.forEach(face => {
-            const { u, v, id } = face;
+        for (const f of currentNet.faces) {
+            drawFace(f, f.id === removedFaceId ? "#ffffff" : "#eaeaea");
+        }
 
-            if (id === removedFaceId) {
-                drawRect(u, v, COLORS.empty, true);
-            } else {
-                drawRect(u, v, COLORS.face, false);
-            }
-        });
-
-        // 배치 후보 표시
         if (options.highlightPositions) {
-            candidatePositions.forEach(pos => {
-                drawRect(pos.u, pos.v, COLORS.candidate, false);
-            });
+            for (const c of candidatePositions) {
+                drawFaceOutline(c, "#8fce00");
+            }
         }
 
-        // 실제 배치된 조각 강조
         if (placed) {
-            drawRect(placed.u, placed.v, COLORS.highlight, false);
+            drawFaceOutline(placed, "#ffd966");
         }
     };
 
-    // ===============================
-    // 사각형 그리기
-    // ===============================
-    function drawRect(u, v, fill, dashed) {
-        const x = u * FACE_SIZE;
-        const y = v * FACE_SIZE;
+    // --------------------------------------
+    // face 그리기 – w×h 지원
+    // --------------------------------------
+    function drawFace(f, fill) {
+        const x = f.u * UNIT;
+        const y = f.v * UNIT;
+        const w = f.w * UNIT;
+        const h = f.h * UNIT;
 
         ctx.save();
         ctx.fillStyle = fill;
-        ctx.strokeStyle = COLORS.border;
+        ctx.strokeStyle = "#333";
         ctx.lineWidth = 2;
-
-        if (dashed) ctx.setLineDash([6, 4]);
-        else ctx.setLineDash([]);
-
         ctx.beginPath();
-        ctx.rect(x, y, FACE_SIZE, FACE_SIZE);
+        ctx.rect(x, y, w, h);
         ctx.fill();
         ctx.stroke();
         ctx.restore();
     }
 
-    // ===============================
-    // 제거할 face 선택 (leaf face)
-    // ===============================
-    function pickLeafFace(net) {
-        const adj = CubeNets.getNetById(net.id).adjacency;
+    // outline만
+    function drawFaceOutline(f, color) {
+        const x = f.u * UNIT;
+        const y = f.v * UNIT;
+        const w = f.w * UNIT;
+        const h = f.h * UNIT;
 
-        const degree = {};
-        adj.forEach(a => {
-            degree[a.from] = (degree[a.from] || 0) + 1;
-        });
-
-        for (const id in degree) {
-            if (degree[id] === 1) return parseInt(id);
-        }
-        return 0;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.stroke();
+        ctx.restore();
     }
 
-    // ===============================
-    // 후보 위치 계산
-    // ===============================
-    function computeCandidatePositions(net, removedFace) {
-        const faces = net.faces.filter(f => f.id !== removedFace);
+    // --------------------------------------
+    // 제거할 face 선택 (leaf face 기준)
+    // --------------------------------------
+    function pickRemovableFace(net) {
+        // adjacency 계산
+        const adj = buildAdjacency(net);
 
-        const used = {};
-        faces.forEach(f => {
-            used[f.u + "," + f.v] = true;
-        });
+        // degree=1인 face가 leaf
+        for (let i = 0; i < 6; i++) {
+            if (adj[i].length === 1) return i;
+        }
+        return 0; // fallback
+    }
 
-        const dirs = [
-            [ 1, 0 ],
-            [-1, 0 ],
-            [ 0, 1 ],
-            [ 0,-1 ]
-        ];
+    // --------------------------------------
+    // adjacency (정육면체+직육면체 대응)
+    // --------------------------------------
+    function buildAdjacency(net) {
+        const adj = [...Array(6)].map(() => []);
+        for (let i = 0; i < net.faces.length; i++) {
+            for (let j = i + 1; j < net.faces.length; j++) {
+                const fi = net.faces[i];
+                const fj = net.faces[j];
 
-        const candidates = [];
+                const ei = getEdges(fi);
+                const ej = getEdges(fj);
 
-        faces.forEach(f => {
-            dirs.forEach(([du, dv]) => {
-                const nu = f.u + du;
-                const nv = f.v + dv;
-                const key = nu + "," + nv;
-
-                if (!used[key]) {
-                    candidates.push({u: nu, v: nv});
+                for (let a = 0; a < 4; a++) {
+                    for (let b = 0; b < 4; b++) {
+                        if (sameEdge(ei[a], ej[b])) {
+                            adj[fi.id].push({ to: fj.id, eA: a, eB: b });
+                            adj[fj.id].push({ to: fi.id, eA: b, eB: a });
+                        }
+                    }
                 }
-            });
-        });
+            }
+        }
+        return adj;
+    }
 
-        // 중복 제거
-        const uniq = {};
+    function getEdges(f) {
+        return [
+            { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, // top
+            { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, // right
+            { a:[f.u + f.w, f.v + f.h], b:[f.u, f.v + f.h]  }, // bottom
+            { a:[f.u, f.v + f.h], b:[f.u, f.v]              }  // left
+        ];
+    }
+
+    function sameEdge(e1, e2) {
+        return (
+            e1.a[0] === e2.b[0] &&
+            e1.a[1] === e2.b[1] &&
+            e1.b[0] === e2.a[0] &&
+            e1.b[1] === e2.a[1]
+        );
+    }
+
+    // --------------------------------------
+    // candidatePositions 계산 (edge 기반)
+    // --------------------------------------
+    function computeCandidatePositions(net) {
         candidatePositions = [];
 
-        candidates.forEach(p => {
-            const k = p.u + "," + p.v;
-            if (!uniq[k]) {
-                uniq[k] = true;
-                candidatePositions.push(p);
+        const removedFace = net.faces.find(f => f.id === removedFaceId);
+        const otherFaces = net.faces.filter(f => f.id !== removedFaceId);
+
+        const edgesR = getEdges(removedFace);
+
+        for (const f of otherFaces) {
+            const edgesF = getEdges(f);
+
+            for (let eF = 0; eF < 4; eF++) {
+                for (let eR = 0; eR < 4; eR++) {
+
+                    if (edgesF[eF].b[0] === edgesR[eR].a[0] &&
+                        edgesF[eF].b[1] === edgesR[eR].a[1] &&
+                        edgesF[eF].a[0] === edgesR[eR].b[0] &&
+                        edgesF[eF].a[1] === edgesR[eR].b[1]) {
+
+                        const pos = computeRemovedPlacement(f, removedFace, eF, eR);
+                        if (pos) candidatePositions.push(pos);
+                    }
+                }
             }
-        });
+        }
     }
 
-    // ===============================
-    // 클릭 이벤트 (조각 배치)
-    // ===============================
+    // --------------------------------------
+    // 실제 배치 좌표 계산
+    // --------------------------------------
+    function computeRemovedPlacement(parent, removed, eP, eR) {
+        const { u, v, w, h } = parent;
+
+        let ru = parent.u;
+        let rv = parent.v;
+
+        switch (eP) {
+            case 0: rv = parent.v - removed.h; ru = parent.u; break;
+            case 1: ru = parent.u + parent.w; rv = parent.v; break;
+            case 2: rv = parent.v + parent.h; ru = parent.u; break;
+            case 3: ru = parent.u - removed.w; rv = parent.v; break;
+            default: return null;
+        }
+        return { 
+            u: ru, 
+            v: rv, 
+            w: removed.w, 
+            h: removed.h 
+        };
+    }
+
+    // --------------------------------------
+    // 클릭 → placed 적용
+    // --------------------------------------
     function onCanvasClick(evt) {
-        if (!currentNet || removedFaceId === null) return;
+        if (!currentNet || removedFaceId == null) return;
 
         const rect = canvas.getBoundingClientRect();
         const x = evt.clientX - rect.left;
         const y = evt.clientY - rect.top;
 
-        const u = Math.floor(x / FACE_SIZE);
-        const v = Math.floor(y / FACE_SIZE);
+        const u = x / UNIT;
+        const v = y / UNIT;
 
-        // 후보 위치만 클릭 가능
         for (const pos of candidatePositions) {
-            if (pos.u === u && pos.v === v) {
-                placed = {u, v};
+            if (
+                u >= pos.u && u <= pos.u + pos.w &&
+                v >= pos.v && v <= pos.v + pos.h
+            ) {
+                placed = pos;
                 UI.renderNet(currentNet, { removeOne: true, highlightPositions: true });
                 return;
             }
         }
     }
 
-    // ===============================
-    // 조각 배치 결과 검증
-    // ===============================
+    // --------------------------------------
+    // 정답 판정 (validator 연결)
+    // --------------------------------------
     UI.checkPieceResult = function (net) {
-        if (!placed || removedFaceId === null) return false;
+        if (!placed) return false;
 
-        const newNet = JSON.parse(JSON.stringify(net));
-
-        const f = newNet.faces.find(face => face.id === removedFaceId);
-        if (!f) return false;
-
+        const f = net.faces.find(f => f.id === removedFaceId);
         f.u = placed.u;
         f.v = placed.v;
 
-        return Validator.isValidCubeNet(newNet);
+        return Validator.validateNet(net);
     };
 
-    // ===============================
-    // 겹침 문제 검증 - main.js에서 Overlap 사용
-    // ===============================
+    // overlap 모드는 Overlap.js에서 처리
     UI.checkOverlapResult = function (net) {
-        const selections = Overlap.getSelections();
-        if (!selections.first || !selections.second) return false;
-
-        const faceGroups = FoldEngine.getFaceGroups();
-        const geom = Validator.extractCubeGeometry(faceGroups);
-
-        return Validator.checkOverlap(geom, selections.first, selections.second);
-    };
-
-    // ===============================
-    // NetRenderer: 겹침 모드에서 사용
-    // ===============================
-    window.NetRenderer = {
-        drawNet(ctx, net) {
-            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-            net.faces.forEach(f => {
-                const x = f.u * FACE_SIZE;
-                const y = f.v * FACE_SIZE;
-
-                ctx.save();
-                ctx.fillStyle = "#e0e0e0";
-                ctx.strokeStyle = "#333";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.rect(x, y, FACE_SIZE, FACE_SIZE);
-                ctx.fill();
-                ctx.stroke();
-                ctx.restore();
-            });
-        }
+        return Overlap.checkUserAnswer(net);
     };
 
 })();

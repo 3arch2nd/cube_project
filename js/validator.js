@@ -226,6 +226,7 @@
                     group.position.copy(group.userData.initialPos);
                 }
                 group.rotation.set(0, 0, 0); 
+                group.updateMatrix(); // 로컬 행렬 업데이트
             });
 
             // 초기 월드 행렬 업데이트
@@ -257,11 +258,10 @@
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
-                // --- ⭐ 오류 해결 핵심: 부모 행렬을 먼저 업데이트하여 상속 보장 ---
+                // ⭐ 오류 해결: 부모 행렬을 먼저 업데이트하여 상속 보장
                 parentGroup.updateMatrixWorld(true); 
                 // childGroup의 matrixWorld가 부모의 변환을 상속받도록 업데이트
                 childGroup.updateMatrixWorld(true); 
-                // ---------------------------------------------------------
 
                 const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
@@ -274,6 +274,7 @@
                 childGroup.rotateOnAxis(localAxis, angle);
                 
                 childGroup.position.add(localPoint);
+                childGroup.updateMatrix(); // 로컬 행렬 업데이트
             });
             
             engine.scene.updateMatrixWorld(true);

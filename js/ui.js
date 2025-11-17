@@ -79,6 +79,7 @@
         // ① 제거된 face는 그리지 않는다
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
+                // outerStroke (#333, 굵기 2)가 innerStroke (#aaa, 굵기 1)보다 진하게 그려지도록 함
                 drawFace(f, "#eaeaea", "#333", "#aaa");   // 원래 면
             }
         }

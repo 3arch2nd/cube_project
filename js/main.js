@@ -233,3 +233,222 @@
 
         // (1) 입체 선택
         if (overlapSolid === SOLID_TYPE.CUBE) {
+            netObj = CubeNets.getRandomOverlapProblem();
+        } else if (overlapSolid === SOLID_TYPE.RECT) {
+            netObj = RectPrismNets.getRandomRectOverlapProblem(); 
+        } else {
+            // BOTH
+            if (Math.random() < 0.5)
+                netObj = CubeNets.getRandomOverlapProblem();
+            else
+                netObj = RectPrismNets.getRandomRectOverlapProblem();
+        }
+
+        return {
+            mode: MAIN_MODE.OVERLAP_FIND,
+            solid: (netObj.dims ? "rect" : "cube"),
+            net: netObj.net,
+            dims: netObj.dims,
+            overlapMode: overlapMode
+        };
+    }
+
+    // ------------------------------------------------------
+    // START
+    // ------------------------------------------------------
+    function startNetProblems() {
+        problems = [];
+        for (let i = 0; i < problemCount; i++) {
+            problems.push(generateOneNetProblem());
+        }
+        currentIndex = 0;
+        showPage("problem-page");
+        loadProblem();
+    }
+
+    function startOverlapProblems() {
+        problems = [];
+        for (let i = 0; i < problemCount; i++) {
+            problems.push(generateOneOverlapProblem());
+        }
+        currentIndex = 0;
+        showPage("problem-page");
+        loadProblem();
+    }
+
+    // ------------------------------------------------------
+    // LOAD 1 PROBLEM
+    // ------------------------------------------------------
+    function loadProblem() {
+
+        currentProblem = problems[currentIndex];
+        window.CubeProject.currentProblem = currentProblem; 
+        
+        if (!currentProblem) {
+            showResultPage();
+            return;
+        }
+
+        document.getElementById("btn-next").classList.add("hidden");
+        document.getElementById("btn-check").classList.remove("hidden");
+        document.getElementById("btn-check").disabled = false; 
+
+        const title = document.getElementById("problem-title");
+        const idx = currentIndex + 1;
+
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
+        } else {
+            title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
+        }
+
+        // UI 초기화: 반드시 init → clear 순서
+        UI.init(netCanvas);
+        UI.clear();
+
+        const opt = {};
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            opt.removeOne = true;
+            opt.highlightPositions = true;
+        }
+
+        // 전개도 렌더링 (UI 쪽에서 removedFaceId가 설정됨)
+        UI.renderNet(currentProblem.net, opt);
+        
+        // 3D 초기화
+        FoldEngine.init(threeCanvas);
+        FoldEngine.currentNet = currentProblem.net;
+
+        // 3D 뷰 초기화: 제거된 조각만 제외하고 5조각만 보이도록 처리
+        const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
+        
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            const removedId = window.UI.getRemovedFaceId(); 
+            const removedFaceIndex = netFor3D.faces.findIndex(f => f.id === removedId);
+            
+            if (removedFaceIndex !== -1) {
+                // 해당 조각을 배열에서 제거 (5조각만 로드)
+                netFor3D.faces.splice(removedFaceIndex, 1);
+            }
+        }
+        
+        FoldEngine.loadNet(netFor3D);
+        FoldEngine.unfoldImmediate(); 
+        
+        // 겹침 모드라면 Overlap 초기화
+        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+            Overlap.startSelection(currentProblem.net);
+            Overlap.currentMode = currentProblem.overlapMode;
+        }
+    }
+
+    // ------------------------------------------------------
+    // ANSWER CHECK / NEXT
+    // ------------------------------------------------------
+    function bindProblemButtons() {
+
+        document.getElementById("btn-check").addEventListener("click", () => {
+            
+            document.getElementById("btn-check").disabled = true;
+
+            // 정답 확인 및 FoldEngine 로드
+            let correct = false;
+            let netToFold;
+
+            if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+                // UI.checkPieceResult 내부에서 netClone(정답 포함)을 FoldEngine에 로드
+                correct = UI.checkPieceResult(currentProblem.net);
+                // netToFold는 FoldEngine에 이미 로드됨
+            } else {
+                // 겹침 찾기 모드: 현재 문제 net을 FoldEngine에 로드
+                FoldEngine.loadNet(currentProblem.net);
+                correct = UI.checkOverlapResult(currentProblem.net);
+            }
+
+            // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
+            FoldEngine.unfoldImmediate(); 
+            
+            // 오답 시에도 접힘 애니메이션 실행 (학습 효과)
+            FoldEngine.foldAnimate(1) 
+                .then(() => {
+                    if (correct) {
+                        alert("정답입니다! 🎉");
+                        document.getElementById("btn-check").classList.add("hidden");
+                        document.getElementById("btn-next").classList.remove("hidden");
+                    } else {
+                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔");
+                        
+                        document.getElementById("btn-check").disabled = false; 
+                        
+                        // 오답 시: 잠시 후 다시 펼쳐서 사용자가 재시도할 수 있도록 함
+                        setTimeout(() => {
+                            FoldEngine.unfoldImmediate();
+                            
+                            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                                // 겹침 문제는 선택 초기화 후 UI 렌더링
+                                Overlap.startSelection(currentProblem.net);
+                                UI.renderNet(currentProblem.net, {}); 
+                            } else {
+                                // 전개도 완성하기는 5조각만 다시 보이도록 FoldEngine 재로드
+                                loadProblem(); // loadProblem()을 호출하여 5조각 상태로 재설정
+                            }
+                        }, 1500); // 1.5초 후 펼치기
+                    }
+                })
+                .catch(err => {
+                    console.error("Fold Animation Error:", err);
+                    alert("정답 확인 중 오류가 발생했습니다.");
+                    document.getElementById("btn-check").disabled = false;
+                });
+        });
+
+        document.getElementById("btn-next").addEventListener("click", () => {
+            currentIndex++;
+            if (currentIndex >= problemCount) {
+                showResultPage();
+            } else {
+                loadProblem();
+            }
+        });
+
+        document.getElementById("btn-exit").addEventListener("click", () => {
+            if (confirm("처음 화면으로 돌아갈까요?")) {
+                showPage("mode-select-page");
+            }
+        });
+    }
+
+    // ------------------------------------------------------
+    // RESULT PAGE
+    // ------------------------------------------------------
+    function showResultPage() {
+        showPage("result-page");
+        document.getElementById("result-acc").textContent =
+            `${((currentIndex / problemCount) * 100).toFixed(1)}%`;
+
+        document.getElementById("btn-restart").onclick = () => {
+            showPage("mode-select-page");
+        };
+    }
+
+    // ------------------------------------------------------
+    // QR POPUP
+    // ------------------------------------------------------
+    function bindQRPopup() {
+        document.getElementById("qr-btn").addEventListener("click", () => {
+            document.getElementById("qr-popup").style.display = "flex";
+            const holder = document.getElementById("qr-holder");
+            holder.innerHTML = "";
+            new QRCode(holder, {
+                text: "https://cube.3arch2nd.site",
+                width: 180,
+                height: 180
+            });
+        });
+
+        document.getElementById("qr-close").addEventListener("click", () => {
+            document.getElementById("qr-popup").style.display = "none";
+        });
+    }
+
+})();

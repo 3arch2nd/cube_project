@@ -29,6 +29,7 @@
     // 상태 변수
     // ------------------------------------------------------
     let mainMode = null;
+    let overlapMode = OVERLAP_MODE.BOTH; // 기본값 설정 (선택 안 했을 경우 대비)
 
     let runMode = RUN_MODE.PRACTICE;
     let problemCount = 10;
@@ -55,14 +56,14 @@
 
         // 초기 선택 버튼 selected 상태 지정 (정육면체 디폴트)
         document.querySelector("#net-run-group button[data-run='practice']").classList.add("selected");
-        document.querySelector("#ov-type-group button[data-type='point']").classList.add("selected");
+        document.querySelector("#ov-type-group button[data-type='both']").classList.add("selected");
         document.querySelector("#ov-run-group button[data-run='practice']").classList.add("selected");
         
         showPage("mode-select-page");
     }
 
     // ------------------------------------------------------
-    // PAGE SWITCH
+    // PAGE SWITCH (⭐ 수정됨: 모든 페이지를 명확히 숨기고, 원하는 페이지를 표시)
     // ------------------------------------------------------
     function showPage(pageId) {
         const pages = [
@@ -73,14 +74,16 @@
             "result-page"
         ];
 
-        // ⭐ mode-select-page에서 시작 시 setup-net을 보여주도록 로직 변경
-        if (pageId === "mode-select-page") {
-             document.getElementById("mode-select-page").classList.remove("hidden");
-             document.getElementById("setup-net").classList.add("hidden");
-             document.getElementById("setup-overlap").classList.add("hidden");
-        } else {
-             pages.forEach(id => document.getElementById(id).classList.add("hidden"));
-             document.getElementById(pageId).classList.remove("hidden");
+        pages.forEach(id => {
+            const pageElement = document.getElementById(id);
+            if (pageElement) {
+                pageElement.classList.add("hidden");
+            }
+        });
+        
+        const targetPage = document.getElementById(pageId);
+        if (targetPage) {
+            targetPage.classList.remove("hidden");
         }
     }
 
@@ -90,18 +93,12 @@
     function bindModeSelectPage() {
         document.getElementById("btn-mode-net").addEventListener("click", () => {
             mainMode = MAIN_MODE.NET_BUILD;
-            // setup-net은 기본적으로 hidden이 아니므로 (index.html 참고), 
-            // 다른 페이지를 숨기고 setup-net만 보이도록 처리
-            document.getElementById("setup-overlap").classList.add("hidden");
-            document.getElementById("mode-select-page").classList.add("hidden");
-            document.getElementById("setup-net").classList.remove("hidden");
+            showPage("setup-net");
         });
 
         document.getElementById("btn-mode-overlap").addEventListener("click", () => {
             mainMode = MAIN_MODE.OVERLAP_FIND;
-            document.getElementById("setup-net").classList.add("hidden");
-            document.getElementById("mode-select-page").classList.add("hidden");
-            document.getElementById("setup-overlap").classList.remove("hidden");
+            showPage("setup-overlap");
         });
     }
 
@@ -267,8 +264,7 @@
         
         // 3D 초기화
         FoldEngine.init(threeCanvas);
-        FoldEngine.currentNet = currentProblem.net;
-
+        
         // 3D 뷰 초기화: 제거된 조각만 제외하고 5조각만 보이도록 처리
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
         
@@ -288,7 +284,7 @@
         // 겹침 모드라면 Overlap 초기화
         if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
             Overlap.startSelection(currentProblem.net);
-            Overlap.currentMode = currentProblem.overlapMode;
+            // Overlap.js에 overlapMode는 필요 없으므로 삭제
         }
     }
 
@@ -309,15 +305,19 @@
                 correct = UI.checkPieceResult(currentProblem.net);
             } else {
                 // 겹침 찾기 모드: 현재 문제 net을 FoldEngine에 로드
-                FoldEngine.loadNet(currentProblem.net);
+                // Overlap.js에서 3D 시뮬레이션을 위해 FoldEngine에 로드해야 할 수도 있으나,
+                // 현재 구조상 Validator에서 loadNet이 호출되거나, UI.checkOverlapResult 내부에
+                // FoldEngine.loadNet이 있어야 합니다.
+                // UI.checkOverlapResult는 Overlap.checkUserAnswer를 호출하며, 이 함수는 FoldEngine.getFaceGroups()를
+                // 통해 3D 위치를 얻습니다. 따라서 겹침 모드에서는 5조각이 아닌 6조각 전체를 로드해야 합니다.
+                
+                // 겹침 찾기 모드에서는 항상 6조각이므로, 현재 net을 FoldEngine에 로드
+                FoldEngine.loadNet(currentProblem.net); // 6조각 전체 로드
                 correct = UI.checkOverlapResult(currentProblem.net);
             }
-
-            // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
-            FoldEngine.unfoldImmediate(); 
             
             // 오답 시에도 접힘 애니메이션 실행 (학습 효과)
-            FoldEngine.foldAnimate(1) 
+            FoldEngine.foldAnimate(1) // ⭐ 수정된 foldAnimate 호출
                 .then(() => {
                     if (correct) {
                         alert("정답입니다! 🎉");
@@ -338,7 +338,8 @@
                                 UI.renderNet(currentProblem.net, {}); 
                             } else {
                                 // 전개도 완성하기는 5조각만 다시 보이도록 FoldEngine 재로드
-                                loadProblem(); // loadProblem()을 호출하여 5조각 상태로 재설정
+                                // loadProblem()을 호출하여 5조각 상태로 재설정
+                                loadProblem(); 
                             }
                         }, 1500); // 1.5초 후 펼치기
                     }
@@ -370,9 +371,12 @@
     // RESULT PAGE
     // ------------------------------------------------------
     function showResultPage() {
+        // 임시 정답률: 연습 모드에서는 실제 정답 기록이 없으므로 문제 수로 대체
+        const correctCount = currentIndex; 
+        
         showPage("result-page");
         document.getElementById("result-acc").textContent =
-            `${((currentIndex / problemCount) * 100).toFixed(1)}%`;
+            `${((correctCount / problemCount) * 100).toFixed(1)}%`;
 
         document.getElementById("btn-restart").onclick = () => {
             showPage("mode-select-page");

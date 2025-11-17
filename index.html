@@ -79,14 +79,10 @@
             margin-top:10px;
         }
 
-        .hidden { display:none; }
+        /* 페이지 숨김 */
+        .hidden { display:none !important; }
 
         /* 문제 페이지 */
-        #problem-page.hidden, 
-        #result-page.hidden {
-            display:none;
-        }
-
         #net-canvas {
             width:350px;
             height:350px;
@@ -100,6 +96,7 @@
             height:350px;
             background:#000;
             margin:20px auto;
+            pointer-events:none !important; /* 클릭 차단 */
         }
 
         /* QR 팝업 */
@@ -138,14 +135,12 @@
 
         <!-- ========== 1. 모드 선택 페이지 ========== -->
         <div id="mode-select-page">
-
             <h2>학습 모드를 선택하세요.</h2>
 
             <div class="option-row">
                 <button class="green-btn" id="btn-mode-net">🧩 전개도 완성하기</button>
                 <button class="orange-btn" id="btn-mode-overlap">🎯 겹쳐지는 부분 찾기</button>
             </div>
-
         </div>
 
 
@@ -269,7 +264,16 @@
     </div>
 
 
-    <!-- ====== main.js 연결 ====== -->
-    <script src="main.js"></script>
+    <!-- ====== JS Modules (순서 중요) ====== -->
+    <script src="js/cube_nets.js"></script>
+    <script src="js/rect_prism_nets.js"></script>
+    <script src="js/foldEngine.js"></script>
+    <script src="js/validator.js"></script>
+    <script src="js/overlap.js"></script>
+    <script src="js/ui.js"></script>
+
+    <!-- main.js는 마지막 -->
+    <script src="js/main.js"></script>
+
 </body>
 </html>

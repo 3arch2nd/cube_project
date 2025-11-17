@@ -41,29 +41,36 @@
     // net 렌더링 (w×h 지원)
     // --------------------------------------
     UI.renderNet = function (net, options = {}) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        currentNet = JSON.parse(JSON.stringify(net));
+    currentNet = JSON.parse(JSON.stringify(net));
 
-        if (options.removeOne) {
-            if (removedFaceId == null) removedFaceId = pickRemovableFace(net);
-            computeCandidatePositions(currentNet);
+    if (options.removeOne) {
+        if (removedFaceId == null) removedFaceId = pickRemovableFace(net);
+        computeCandidatePositions(currentNet);
+    }
+
+    // ① 제거된 face는 그리지 않는다
+    for (const f of currentNet.faces) {
+        if (f.id !== removedFaceId) {
+            drawFace(f, "#eaeaea");   // 정상 face만 그리기
         }
+    }
 
-        for (const f of currentNet.faces) {
-            drawFace(f, f.id === removedFaceId ? "#ffffff" : "#eaeaea");
+    // ② 후보 위치만 표시
+    if (options.highlightPositions) {
+        for (const c of candidatePositions) {
+            // 연한 테두리 or 배경
+            drawFaceOutline(c, "#999999");
         }
+    }
 
-        if (options.highlightPositions) {
-            for (const c of candidatePositions) {
-                drawFaceOutline(c, "#8fce00");
-            }
-        }
+    // ③ 사용자가 선택한 위치
+    if (placed) {
+        drawFaceOutline(placed, "#ffd966");
+    }
+};
 
-        if (placed) {
-            drawFaceOutline(placed, "#ffd966");
-        }
-    };
 
     // --------------------------------------
     // face 그리기 – w×h 지원

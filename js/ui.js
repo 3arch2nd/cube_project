@@ -177,7 +177,7 @@
 
 
     // --------------------------------------
-    // face 그리기 – w×h 지원
+    // face 그리기 – w×h 지원 (내부 선 명암 최종 수정)
     // --------------------------------------
     function drawFace(f, fill, outerStroke = "#333", innerStroke = "#aaa") { 
         const x = (f.u + U_OFFSET) * UNIT; 
@@ -198,18 +198,17 @@
         ctx.lineWidth = 1; 
         
         if (f.w > 0 && f.h > 0) { 
-             // 가로줄 그리기 (위, 아래 경계선은 테두리 담당)
-             // w, h가 1칸 이상일 때만 내부 선을 그립니다.
              const cellW = Math.round(w / UNIT);
              const cellH = Math.round(h / UNIT);
 
+             // 가로줄 그리기
              for(let i = 1; i < cellH; i++) {
                 ctx.beginPath();
                 ctx.moveTo(x, y + i * UNIT);
                 ctx.lineTo(x + w, y + i * UNIT);
                 ctx.stroke();
              }
-             // 세로줄 그리기 (좌, 우 경계선은 테두리 담당)
+             // 세로줄 그리기
              for(let i = 1; i < cellW; i++) {
                 ctx.beginPath();
                 ctx.moveTo(x + i * UNIT, y);
@@ -218,7 +217,7 @@
              }
         }
         
-        // 3. 테두리를 그린다 (가장 진하고 굵게)
+        // 3. 외부 테두리를 그린다 (가장 진하고 굵게)
         ctx.strokeStyle = outerStroke; 
         ctx.lineWidth = 2; 
         ctx.beginPath();
@@ -512,7 +511,6 @@
              netClone.faces.sort((a,b) => a.id - b.id);
         }
         
-        // 2. 오류 수정: 정답을 포함한 완전한 netClone을 로드하여 FoldEngine의 상태를 업데이트
         window.FoldEngine.loadNet(netClone);
 
         const result = Validator.validateNet(netClone);

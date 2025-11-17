@@ -319,17 +319,16 @@
         FoldEngine.init(threeCanvas);
         FoldEngine.currentNet = currentProblem.net;
 
-        // ⭐ 3. 오른쪽 3D 전개도 복구: 제거된 조각만 제외하고 5조각만 보이도록 처리
+        // 3D 뷰 초기화: 제거된 조각만 제외하고 5조각만 보이도록 처리
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
         
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
             const removedId = window.UI.getRemovedFaceId(); 
             const removedFaceIndex = netFor3D.faces.findIndex(f => f.id === removedId);
             
-            // 임시로 removedFace를 배열에서 제거 (null로 설정)하여 FoldEngine이 로드하지 않도록 함
             if (removedFaceIndex !== -1) {
-                netFor3D.faces[removedFaceIndex] = null;
-                netFor3D.faces = netFor3D.faces.filter(f => f !== null);
+                // 해당 조각을 배열에서 제거
+                netFor3D.faces.splice(removedFaceIndex, 1);
             }
         }
         
@@ -352,24 +351,27 @@
             
             document.getElementById("btn-check").disabled = true;
 
-            // 1. 전개도 완성하기 모드에서는 UI.checkPieceResult가 FoldEngine.loadNet(정답 포함)을 호출함.
-            // 겹침 찾기 모드에서는 currentNet을 FoldEngine에 로드
-            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-                 FoldEngine.loadNet(currentProblem.net);
+            // 정답 확인 및 FoldEngine 로드
+            let correct = false;
+            let netToFold;
+
+            if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+                // UI.checkPieceResult 내부에서 netClone(정답 포함)을 FoldEngine에 로드
+                correct = UI.checkPieceResult(currentProblem.net);
+                netToFold = currentProblem.net; // FoldEngine에 이미 로드됨 (UI.checkPieceResult 내부에서)
+            } else {
+                // 겹침 찾기 모드: 현재 문제 net을 FoldEngine에 로드
+                FoldEngine.loadNet(currentProblem.net);
+                correct = UI.checkOverlapResult(currentProblem.net);
+                netToFold = currentProblem.net;
             }
 
             // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
             FoldEngine.unfoldImmediate(); 
+            
+            // ⭐ 1. 오답 시에도 접힘 애니메이션 실행 (학습 효과)
             FoldEngine.foldAnimate(1) 
                 .then(() => {
-                    let correct = false;
-
-                    if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-                        correct = UI.checkPieceResult(currentProblem.net);
-                    } else {
-                        correct = UI.checkOverlapResult(currentProblem.net);
-                    }
-
                     if (correct) {
                         alert("정답입니다! 🎉");
                         document.getElementById("btn-check").classList.add("hidden");
@@ -378,12 +380,20 @@
                         alert("틀렸습니다. 다시 생각해 볼까요? 🤔");
                         
                         document.getElementById("btn-check").disabled = false; 
-                        FoldEngine.unfoldImmediate();
                         
-                        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-                            Overlap.startSelection(currentProblem.net);
-                            UI.renderNet(currentProblem.net, {}); 
-                        }
+                        // ⭐ 오답 시: 잠시 후 다시 펼쳐서 사용자가 재시도할 수 있도록 함
+                        setTimeout(() => {
+                            FoldEngine.unfoldImmediate();
+                            
+                            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                                // 겹침 문제는 선택 초기화 후 UI 렌더링
+                                Overlap.startSelection(currentProblem.net);
+                                UI.renderNet(currentProblem.net, {}); 
+                            } else {
+                                // 전개도 완성하기는 5조각만 다시 보이도록 FoldEngine 재로드
+                                loadProblem(); // loadProblem()을 호출하여 5조각 상태로 재설정
+                            }
+                        }, 1500); // 1.5초 후 펼치기
                     }
                 })
                 .catch(err => {

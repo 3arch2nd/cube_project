@@ -1,5 +1,5 @@
 /**
- * main.js – 완전 통합 버전 (전개도 + 겹침 찾기 / cube + rect / point + edge)
+ * main.js – 완전 통합 버전 (정육면체 전용)
  */
 
 (function () {
@@ -17,12 +17,7 @@
     };
     window.CubeProject.MAIN_MODE = MAIN_MODE; 
 
-    const NET_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
-
-    // 겹침 모드 – 입체 종류
-    const SOLID_TYPE = { CUBE: "cube", RECT: "rect", BOTH: "both" };
-
-    // 겹침 모드 – 유형(점/선/둘다)
+    // 정육면체 전용이므로 CUBE만 사용
     const OVERLAP_MODE = { POINT: "point", EDGE: "edge", BOTH: "both" };
 
     const RUN_MODE = { PRACTICE: "practice", REAL: "real" };
@@ -31,14 +26,7 @@
     // 상태 변수
     // ------------------------------------------------------
     let mainMode = null;
-
-    // 전개도
-    let netType = NET_TYPE.CUBE;
-
-    // 겹침 찾기
-    let overlapSolid = SOLID_TYPE.CUBE;
     let overlapMode = OVERLAP_MODE.POINT;
-
     let runMode = RUN_MODE.PRACTICE;
     let problemCount = 10;
 
@@ -62,10 +50,8 @@
         bindProblemButtons();
         bindQRPopup();
 
-        // 초기 선택 버튼 selected 상태 지정
-        document.querySelector("#net-type-group button[data-type='cube']").classList.add("selected");
+        // 초기 선택 버튼 selected 상태 지정 (정육면체만 남기므로)
         document.querySelector("#net-run-group button[data-run='practice']").classList.add("selected");
-        document.querySelector("#ov-solid-group button[data-solid='cube']").classList.add("selected");
         document.querySelector("#ov-type-group button[data-type='point']").classList.add("selected");
         document.querySelector("#ov-run-group button[data-run='practice']").classList.add("selected");
         
@@ -92,30 +78,24 @@
     // MODE SELECT PAGE
     // ------------------------------------------------------
     function bindModeSelectPage() {
+        // 직육면체 관련 설정 페이지 대신 바로 문제 설정으로 이동
         document.getElementById("btn-mode-net").addEventListener("click", () => {
             mainMode = MAIN_MODE.NET_BUILD;
-            showPage("setup-net");
+            showPage("setup-net"); // 기존 전개도 완성하기 설정 페이지 재사용
         });
 
         document.getElementById("btn-mode-overlap").addEventListener("click", () => {
             mainMode = MAIN_MODE.OVERLAP_FIND;
-            showPage("setup-overlap");
+            showPage("setup-overlap"); // 기존 겹침 찾기 설정 페이지 재사용
         });
     }
 
     // ------------------------------------------------------
-    // NET BUILD SETUP PAGE
+    // NET BUILD SETUP PAGE (정육면체 전용으로 변경)
     // ------------------------------------------------------
     function bindNetSetupPage() {
 
-        document.querySelectorAll("#net-type-group button").forEach(btn => {
-            btn.addEventListener("click", () => {
-                document.querySelectorAll("#net-type-group button")
-                    .forEach(b => b.classList.remove("selected"));
-                btn.classList.add("selected");
-                netType = btn.dataset.type;
-            });
-        });
+        // ⭐ 입체 종류 선택 그룹 제거 (정육면체 고정)
 
         document.querySelectorAll("#net-run-group button").forEach(btn => {
             btn.addEventListener("click", () => {
@@ -140,22 +120,13 @@
     }
 
     // ------------------------------------------------------
-    // OVERLAP SETUP PAGE (new version)
+    // OVERLAP SETUP PAGE (정육면체 전용으로 변경)
     // ------------------------------------------------------
     function bindOverlapSetupPage() {
 
-        // (1) 입체 종류
-        document.querySelectorAll("#ov-solid-group button").forEach(btn => {
-            btn.addEventListener("click", () => {
-                document.querySelectorAll("#ov-solid-group button")
-                    .forEach(b => b.classList.remove("selected"));
-                btn.classList.add("selected");
+        // ⭐ 입체 종류 선택 그룹 제거 (정육면체 고정)
 
-                overlapSolid = btn.dataset.solid;
-            });
-        });
-
-        // (2) 겹침 유형
+        // 겹침 유형
         document.querySelectorAll("#ov-type-group button").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#ov-type-group button")
@@ -193,62 +164,25 @@
     // PROBLEM GENERATION
     // ------------------------------------------------------
 
-    /** 1) 전개도 문제 생성 */
+    /** 1) 전개도 문제 생성 (정육면체 고정) */
     function generateOneNetProblem() {
-
-        if (netType === NET_TYPE.CUBE) {
-            const p = CubeNets.getRandomPieceProblem();
-            return {
-                mode: MAIN_MODE.NET_BUILD,
-                solid: "cube",
-                net: p.net,
-                dims: null
-            };
-        }
-
-        if (netType === NET_TYPE.RECT) {
-            const r = RectPrismNets.getRandomRectNet();
-            return {
-                mode: MAIN_MODE.NET_BUILD,
-                solid: "rect",
-                net: r.net,
-                dims: r.dims
-            };
-        }
-
-        // BOTH
-        if (Math.random() < 0.5) {
-            const p = CubeNets.getRandomPieceProblem();
-            return { mode:MAIN_MODE.NET_BUILD, solid:"cube", net:p.net, dims:null };
-        } else {
-            const r = RectPrismNets.getRandomRectNet();
-            return { mode:MAIN_MODE.NET_BUILD, solid:"rect", net:r.net, dims:r.dims };
-        }
+        const p = CubeNets.getRandomPieceProblem();
+        return {
+            mode: MAIN_MODE.NET_BUILD,
+            solid: "cube",
+            net: p.net,
+            dims: null
+        };
     }
 
-    /** 2) 겹침 문제 생성 */
+    /** 2) 겹침 문제 생성 (정육면체 고정) */
     function generateOneOverlapProblem() {
-
-        let netObj;
-
-        // (1) 입체 선택
-        if (overlapSolid === SOLID_TYPE.CUBE) {
-            netObj = CubeNets.getRandomOverlapProblem();
-        } else if (overlapSolid === SOLID_TYPE.RECT) {
-            netObj = RectPrismNets.getRandomRectOverlapProblem(); 
-        } else {
-            // BOTH
-            if (Math.random() < 0.5)
-                netObj = CubeNets.getRandomOverlapProblem();
-            else
-                netObj = RectPrismNets.getRandomRectOverlapProblem();
-        }
-
+        const netObj = CubeNets.getRandomOverlapProblem();
         return {
             mode: MAIN_MODE.OVERLAP_FIND,
-            solid: (netObj.dims ? "rect" : "cube"),
+            solid: "cube",
             net: netObj.net,
-            dims: netObj.dims,
+            dims: null,
             overlapMode: overlapMode
         };
     }
@@ -353,12 +287,10 @@
 
             // 정답 확인 및 FoldEngine 로드
             let correct = false;
-            let netToFold;
 
             if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
                 // UI.checkPieceResult 내부에서 netClone(정답 포함)을 FoldEngine에 로드
                 correct = UI.checkPieceResult(currentProblem.net);
-                // netToFold는 FoldEngine에 이미 로드됨
             } else {
                 // 겹침 찾기 모드: 현재 문제 net을 FoldEngine에 로드
                 FoldEngine.loadNet(currentProblem.net);

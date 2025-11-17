@@ -80,7 +80,8 @@
         // ① 제거된 face는 그리지 않는다
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                drawFace(f, "#eaeaea");   // 원래 면
+                // ⭐ 1. 문제 원본 부분은 진한 테두리
+                drawFace(f, "#eaeaea", "#666");   // 원래 면
             }
         }
 
@@ -88,7 +89,6 @@
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
-                    // drawFaceOutline은 이제 Offset을 내부에서 적용함
                     drawFaceOutline(c, "#999", 3, "#f9f9f9"); // 연한 배경 추가
                 }
             }
@@ -164,14 +164,12 @@
     // 2, 3. 오류 수정: 연한 모눈 전체 그리기
     // --------------------------------------
     function drawGrid() {
-        const gridSize = canvas.width / UNIT; 
         const maxCells = Math.floor(canvas.width / UNIT) + 1; 
         
         ctx.save();
         ctx.strokeStyle = "#ddd"; // 연한 모눈 선
         ctx.lineWidth = 1;
         
-        // 캔버스 전체에 모눈선을 그립니다.
         for (let i = 0; i < maxCells; i++) {
             // 수직선
             ctx.beginPath();
@@ -193,7 +191,7 @@
     // --------------------------------------
     // face 그리기 – w×h 지원
     // --------------------------------------
-    function drawFace(f, fill) {
+    function drawFace(f, fill, stroke = "#333") {
         // ⭐ Offset 적용
         const x = (f.u + U_OFFSET) * UNIT; 
         const y = (f.v + V_OFFSET) * UNIT; 
@@ -202,7 +200,7 @@
 
         ctx.save();
         ctx.fillStyle = fill;
-        ctx.strokeStyle = "#333";
+        ctx.strokeStyle = stroke; // ⭐ 테두리 색상 적용
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.rect(x, y, w, h);

@@ -312,7 +312,7 @@
 
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
-                    // ⭐ 최종 보강: 행렬 업데이트 순서를 명확히
+                    // 최종 보강: 행렬 업데이트 순서를 명확히
                     parentGroup.updateMatrixWorld(true);
                     childGroup.updateMatrixWorld(true); 
 

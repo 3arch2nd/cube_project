@@ -88,14 +88,15 @@
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
-                    drawFaceOutline(c, "#ddd", 1, "#f9f9f9"); 
+                    // ⭐ 최종 수정: 후보 영역 배경색 제거 (투명하게)
+                    drawFaceOutline(c, "#ddd", 1, 'transparent'); 
                 }
             }
         }
 
         // ③ 사용자가 클릭하여 배치한 위치 (전개도 완성하기)
         if (placed) {
-            drawFaceOutline(placed, "#ffc107", 5); 
+            drawFaceOutline(placed, "#ffc107", 5, 'transparent'); // 배경은 투명하게
         }
         
         // 캔버스 테두리 다시 그리기

@@ -62,9 +62,8 @@
              computeCandidatePositions(currentNet); 
         }
         
-        // ⭐ 1. 오류 수정: 중앙 정렬 Offset 계산 및 적용
         calculateCenterOffset(currentNet, removedFaceId, placed, isNetBuildMode);
-        drawGrid(); // 2, 3. 오류 수정: 연한 색 모눈 전체 그리기
+        drawGrid(); 
 
 
         // 겹침 문제: 선택된 점/선 하이라이트
@@ -80,8 +79,8 @@
         // ① 제거된 face는 그리지 않는다
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                // ⭐ 1. 문제 원본 부분은 진한 테두리
-                drawFace(f, "#eaeaea", "#666");   // 원래 면
+                // ⭐ 2. 문제 도형의 테두리 및 내부 선 색상 통일 (#333)
+                drawFace(f, "#eaeaea", "#333");   // 원래 면
             }
         }
 
@@ -89,13 +88,15 @@
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
-                    drawFaceOutline(c, "#999", 3, "#f9f9f9"); // 연한 배경 추가
+                    // ⭐ 1. 후보 영역은 굵은 선 없이 모눈과 같도록 설정
+                    drawFaceOutline(c, "#ddd", 1, "#f9f9f9"); // 얇은 모눈 선과 연한 배경
                 }
             }
         }
 
         // ③ 사용자가 클릭하여 배치한 위치 (전개도 완성하기)
         if (placed) {
+            // ⭐ 클릭된 영역은 굵은 노란색 테두리 유지
             drawFaceOutline(placed, "#ffc107", 5); 
         }
         
@@ -117,7 +118,6 @@
         
         const facesToConsider = net.faces.filter(f => f.id !== removedId);
         
-        // 활성 면들의 경계를 찾습니다.
         for (const f of facesToConsider) {
             minU = Math.min(minU, f.u);
             maxU = Math.max(maxU, f.u + f.w);
@@ -125,7 +125,6 @@
             maxV = Math.max(maxV, f.v + f.h);
         }
         
-        // 후보 위치까지 고려 (전체 레이아웃 크기)
         if (isNetBuildMode && candidatePositions.length > 0) {
             for (const c of candidatePositions) {
                 minU = Math.min(minU, c.u);
@@ -135,7 +134,6 @@
             }
         }
 
-        // 배치된 조각이 있다면 포함
         if (placedPos) {
              minU = Math.min(minU, placedPos.u);
              maxU = Math.max(maxU, placedPos.u + placedPos.w);
@@ -143,31 +141,26 @@
              maxV = Math.max(maxV, placedPos.v + placedPos.h);
         }
 
-        // 전개도의 크기 (단위: 칸)
         const netWidth = maxU - minU;
         const netHeight = maxV - minV;
         
-        // 캔버스 크기 (단위: 픽셀)
         const canvasSize = canvas.width;
         
-        // 전개도를 중앙에 배치하기 위한 Offset (단위: 칸)
-        // (캔버스 픽셀 크기 / UNIT - 전개도 칸 크기) / 2 - 최소 U 좌표
         U_OFFSET = (canvasSize / UNIT - netWidth) / 2 - minU;
         V_OFFSET = (canvasSize / UNIT - netHeight) / 2 - minV;
         
-        // 정수 칸 단위로 반올림 (모눈선 정렬)
         U_OFFSET = Math.round(U_OFFSET);
         V_OFFSET = Math.round(V_OFFSET);
     }
     
     // --------------------------------------
-    // 2, 3. 오류 수정: 연한 모눈 전체 그리기
+    // 연한 모눈 전체 그리기
     // --------------------------------------
     function drawGrid() {
         const maxCells = Math.floor(canvas.width / UNIT) + 1; 
         
         ctx.save();
-        ctx.strokeStyle = "#ddd"; // 연한 모눈 선
+        ctx.strokeStyle = "#ddd"; 
         ctx.lineWidth = 1;
         
         for (let i = 0; i < maxCells; i++) {
@@ -191,8 +184,7 @@
     // --------------------------------------
     // face 그리기 – w×h 지원
     // --------------------------------------
-    function drawFace(f, fill, stroke = "#333") {
-        // ⭐ Offset 적용
+    function drawFace(f, fill, stroke = "#333") { // ⭐ stroke 기본값 설정
         const x = (f.u + U_OFFSET) * UNIT; 
         const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
@@ -200,8 +192,8 @@
 
         ctx.save();
         ctx.fillStyle = fill;
-        ctx.strokeStyle = stroke; // ⭐ 테두리 색상 적용
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = stroke; 
+        ctx.lineWidth = 2; // ⭐ 내부 선 굵기 유지
         ctx.beginPath();
         ctx.rect(x, y, w, h);
         ctx.fill();
@@ -211,7 +203,6 @@
 
     // outline만
     function drawFaceOutline(f, color, lineWidth = 3, fillColor = 'transparent') {
-        // ⭐ Offset 적용
         const x = (f.u + U_OFFSET) * UNIT; 
         const y = (f.v + V_OFFSET) * UNIT; 
         const w = f.w * UNIT;
@@ -243,18 +234,15 @@
         if (!face) return;
 
         if (elem.type === "vertex") {
-            // 점: 작은 원으로 표시 (⭐ Offset 적용)
             const x = (elem.x + U_OFFSET) * UNIT; 
             const y = (elem.y + V_OFFSET) * UNIT;
             ctx.beginPath();
             ctx.arc(x, y, 7, 0, Math.PI * 2);
             ctx.fill();
         } else if (elem.type === "edge") {
-            // 선: 해당 edge를 두껍게 표시
             const edges = getEdges(face);
             const edge = edges[elem.edge];
 
-            // 겹침 판정에 사용된 edge의 (u,v) 좌표 (⭐ Offset 적용)
             const u1 = (edge.a[0] + U_OFFSET) * UNIT;
             const v1 = (edge.a[1] + V_OFFSET) * UNIT;
             const u2 = (edge.b[0] + U_OFFSET) * UNIT;
@@ -271,7 +259,7 @@
 
 
     // --------------------------------------
-    // [포함된 헬퍼 함수] 제거할 face 선택 (leaf face 기준)
+    // [포함된 헬퍼 함수] pickRemovableFace
     // --------------------------------------
     function pickRemovableFace(net) {
         const adj = buildAdjacency(net);
@@ -281,9 +269,17 @@
         }
         return 0; 
     }
+    
+    // --------------------------------------
+    // [포함된 헬퍼 함수] getRemovedFaceId (main.js에서 호출용)
+    // --------------------------------------
+    UI.getRemovedFaceId = function () {
+        return removedFaceId;
+    }
+
 
     // --------------------------------------
-    // [포함된 헬퍼 함수] adjacency (정육면체+직육면체 대응)
+    // [포함된 헬퍼 함수] buildAdjacency
     // --------------------------------------
     function buildAdjacency(net) {
         const adj = [...Array(6)].map(() => []);
@@ -344,7 +340,7 @@
     }
 
     // --------------------------------------
-    // candidatePositions 계산 (모든 유효한 빈 공간)
+    // [포함된 헬퍼 함수] computeCandidatePositions
     // --------------------------------------
     function computeCandidatePositions(net) {
         candidatePositions = [];
@@ -383,7 +379,7 @@
     }
     
     // --------------------------------------
-    // 실제 배치 좌표 계산 (인접 Edge 기준으로)
+    // [포함된 헬퍼 함수] computePlacementByAttachment
     // --------------------------------------
     function computePlacementByAttachment(parent, removed, eP, eR) {
         let ru, rv;
@@ -423,11 +419,9 @@
     // --------------------------------------
     function onCanvasClick(evt) {
         const rect = canvas.getBoundingClientRect();
-        // ⭐ Offset 반영된 픽셀 위치 계산
         const x = (evt.clientX - rect.left);
         const y = (evt.clientY - rect.top);
 
-        // ⭐ 캔버스 픽셀 위치를 Offset이 적용된 그리드 좌표로 변환
         const u = x / UNIT - U_OFFSET;
         const v = y / UNIT - V_OFFSET;
 
@@ -468,11 +462,9 @@
         const netClone = JSON.parse(JSON.stringify(net));
         const f = netClone.faces.find(f => f.id === removedFaceId);
         
-        // placed 위치를 복제본에 적용
         f.u = placed.u;
         f.v = placed.v;
         
-        // 4. 오류 수정: 정답 확인 시 FoldEngine이 현재 placed 상태로 로드되어 접히도록 처리
         window.FoldEngine.loadNet(netClone);
 
         const result = Validator.validateNet(netClone);

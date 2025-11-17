@@ -28,6 +28,7 @@
     //  Three.js 초기화
     // ---------------------------------------
     FoldEngine.init = function (canvas) {
+        // ... (생략: init 함수는 이전과 동일) ...
         renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         renderer.setSize(canvas.width, canvas.height);
 
@@ -35,9 +36,8 @@
 
         camera = new THREE.PerspectiveCamera(40, canvas.width / canvas.height, 0.1, 100);
         
-        // ⭐ 2. 오류 수정: 3D 뷰 초기 시점 통일 (위에서 내려다보는 시점)
-        camera.position.set(0, 0, 8); // Z축을 높게 설정하여 전개도를 위에서 내려다보게 함
-        camera.lookAt(new THREE.Vector3(0, 0, 0)); // 중심을 바라봄
+        camera.position.set(0, 0, 8); 
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
 
         const light = new THREE.DirectionalLight(0xffffff, 1);
         light.position.set(4, 5, 6);
@@ -51,6 +51,7 @@
     // face geometry 생성 (w × h)
     // ---------------------------------------
     function createFaceGeometry(w, h) {
+        // ... (생략: createFaceGeometry 함수는 이전과 동일) ...
         const geom = new THREE.Geometry();
 
         const hw = w / 2;
@@ -74,6 +75,7 @@
     // 2D 전개도 → 3D face group 생성
     // ---------------------------------------
     FoldEngine.loadNet = function (net) {
+        // ... (생략: loadNet 함수는 이전과 동일) ...
         // 리셋
         faceGroups = [];
         while (scene.children.length) scene.remove(scene.children[0]);
@@ -84,10 +86,8 @@
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         
-        // 유효한 면만 필터링
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
         
-        // 전개도의 2D 중심 좌표 계산 (3D 시점 중앙 정렬용)
         let minU = Infinity, maxU = -Infinity;
         let minV = Infinity, maxV = -Infinity;
         
@@ -109,7 +109,7 @@
             const { id, u, v, w, h } = face;
 
             const group = new THREE.Group();
-            group.faceId = id;
+            group.faceId = id; // ⭐ faceId를 group에 저장
 
             const geom = createFaceGeometry(w, h);
             const mat = new THREE.MeshLambertMaterial({
@@ -145,6 +145,9 @@
 
         faceGroups.sort((a, b) => a.faceId - b.faceId);
         
+        // ⭐ 오류 해결: load 직후 월드 행렬을 업데이트하여 foldAnimate 진입 시 안전하게 함
+        scene.updateMatrixWorld(true);
+
         renderer.render(scene, camera);
     };
 
@@ -165,11 +168,12 @@
     // [포함된 헬퍼 함수] getEdges
     // ---------------------------------------
     function getEdges(f) {
+        // ... (생략) ...
         return [
-            { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, // 0: top
-            { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, // 1: right
-            { a:[f.u + f.w, f.v + f.h], b:[f.u, f.v + f.h]  }, // 2: bottom
-            { a:[f.u, f.v + f.h], b:[f.u, f.v]              }  // 3: left
+            { a:[f.u, f.v],       b:[f.u + f.w, f.v]        }, 
+            { a:[f.u + f.w, f.v], b:[f.u + f.w, f.v + f.h]  }, 
+            { a:[f.u + f.w, f.v + f.h], b:[f.u, f.v + f.h]  }, 
+            { a:[f.u, f.v + f.h], b:[f.u, f.v]              }  
         ];
     }
 
@@ -177,7 +181,6 @@
     // [포함된 헬퍼 함수] adjacency 생성
     // ---------------------------------------
     function buildAdjacency(net) {
-        // ⭐ adj 배열의 크기를 faces의 최대 ID에 맞게 조정
         const maxId = net.faces.filter(f => f).reduce((max, f) => Math.max(max, f.id), -1);
         const adj = [...Array(maxId + 1)].map(() => []);
 
@@ -237,7 +240,7 @@
 
             if (adj[f]) {
                  adj[f].forEach(n => {
-                    if (parent[n.to] === null && n.to <= maxId) { // 유효한 ID인지 확인
+                    if (parent[n.to] === null && n.to <= maxId) { 
                         parent[n.to] = f;
                         Q.push(n.to);
                     }
@@ -248,7 +251,7 @@
     }
     
     // ---------------------------------------
-    // [포함된 헬퍼 함수] edgeIndex에 따른 회전축 계산 및 로컬 변환 (Helper for foldAnimate)
+    // [포함된 헬퍼 함수] edgeIndex에 따른 회전축 계산 및 로컬 변환
     // ---------------------------------------
     function getAxisAndPoint(parentGroup, relation) {
         
@@ -257,7 +260,6 @@
         const parentEdges = getEdges(parentInfo);
         const edge = parentEdges[relation.edgeA];
         
-        // 격자 좌표를 3D World 좌표로 변환 (u -> X, v -> -Y, Z=0)
         const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
         const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
         
@@ -290,6 +292,7 @@
                 
                 FoldEngine.unfoldImmediate(); 
                 
+                // ⭐ 오류 해결: 애니메이션 루프 내에서 World Matrix 업데이트
                 scene.updateMatrixWorld(true);
 
                 order.forEach(faceId => {
@@ -307,6 +310,14 @@
 
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
+                    // ⭐ 오류 해결: childGroup.matrixWorld가 유효한지 확인 후 getInverse 호출
+                    // loadNet에서 scene.updateMatrixWorld(true)를 호출했고, 
+                    // 애니메이션 루프에서도 호출했으므로 matrixWorld는 유효해야 함.
+                    // 만약 이 단계에서도 오류가 난다면, group이 scene에 연결된 후 충분한 시간이 없었거나 
+                    // 계층 구조에 문제가 있는 것.
+                    
+                    childGroup.updateMatrixWorld(true); // 혹시 모를 누락 방지
+
                     const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 

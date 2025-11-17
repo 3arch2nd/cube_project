@@ -114,7 +114,6 @@
             }
         }
 
-        // 연결 개수 = 5 여야 함
         let totalConnections = 0;
         adj.forEach(a => totalConnections += a.length);
         totalConnections = totalConnections / 2;
@@ -155,7 +154,6 @@
     // (C) FoldEngine 기반 실제 fold 테스트
     // ----------------------------------------------------
     function simulateFolding(net, adj) {
-        // 별도 가상 FoldEngine 인스턴스
         const dummyCanvas = document.createElement("canvas");
         dummyCanvas.width = 300;
         dummyCanvas.height = 300;
@@ -169,7 +167,7 @@
             return fail("FoldEngine이 초기화되지 않았습니다.");
         }
         
-        // --- 가상 Three.js 환경 재구축 (TypeError 방지) ---
+        // --- 가상 Three.js 환경 재구축 ---
         engine.init = function(canvas) {
             engine.scene = new THREE.Scene();
             engine.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
@@ -259,8 +257,11 @@
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
-                // ⭐ 오류 해결: childGroup의 matrixWorld를 사용하기 전에 명시적으로 업데이트
+                // --- ⭐ 오류 해결 핵심: 부모 행렬을 먼저 업데이트하여 상속 보장 ---
+                parentGroup.updateMatrixWorld(true); 
+                // childGroup의 matrixWorld가 부모의 변환을 상속받도록 업데이트
                 childGroup.updateMatrixWorld(true); 
+                // ---------------------------------------------------------
 
                 const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);

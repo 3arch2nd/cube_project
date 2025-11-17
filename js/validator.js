@@ -34,7 +34,6 @@
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
 
         if (validFaces.length !== 6) {
-            // ⭐ 2. 오류 수정: 유효한 면이 6개가 아닐 경우 오류 처리 (UI에서는 6개가 들어와야 함)
             return fail(`전개도는 반드시 6개의 면으로 구성되어야 합니다. 현재 유효 면 개수: ${validFaces.length}`);
         }
 
@@ -128,9 +127,8 @@
     }
 
     function checkConnectivity(adj) {
-        // 면의 ID를 기준으로 BFS 시작
         const facesIds = adj.map((a, id) => a.length > 0 ? id : -1).filter(id => id !== -1);
-        if (facesIds.length === 0) return true; // 면이 없으면 연결된 것으로 간주 (오류는 validateFaces에서 걸림)
+        if (facesIds.length === 0) return true; 
 
         const visited = Array(6).fill(false);
         const Q = [facesIds[0]];
@@ -146,7 +144,6 @@
             });
         }
 
-        // 모든 유효한 면이 방문되었는지 확인
         if (facesIds.some(id => !visited[id])) {
             return fail("전개도 면들이 하나로 연결되지 않았습니다.");
         }
@@ -156,7 +153,6 @@
 
     // ----------------------------------------------------
     // (C) FoldEngine 기반 실제 fold 테스트
-    //   → 여기서는 임시 Three.js Scene을 생성하여 fold 시도
     // ----------------------------------------------------
     function simulateFolding(net, adj) {
         // 별도 가상 FoldEngine 인스턴스
@@ -172,17 +168,31 @@
         if (!engine.init || !engine.loadNet) {
             return fail("FoldEngine이 초기화되지 않았습니다.");
         }
+        
+        // --- 가상 Three.js 환경 재구축 (TypeError 방지) ---
+        engine.init = function(canvas) {
+            // renderer는 필요 없지만, scene과 camera, light는 필요
+            engine.scene = new THREE.Scene();
+            engine.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+            engine.camera.position.set(0, 0, 8); // 시점 설정
+            engine.camera.lookAt(new THREE.Vector3(0, 0, 0));
+            
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(4, 5, 6);
+            
+            // ⭐ Scene에 카메라와 라이트 추가: Three.js 계층 구조를 완성
+            engine.scene.add(engine.camera);
+            engine.scene.add(light);
+            engine.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        };
+        // --- 끝 ---
 
         engine.init(dummyCanvas);
         engine.loadNet(net); 
 
-        // Folding tree를 바탕으로 즉시 접기 시도
-        
         const groups = engine.getFaceGroups();
-        if (groups.length <= 1) return true; // 면이 1개 이하면 충돌 검사 무시
+        if (groups.length <= 1) return true; 
 
-        // ⭐ 2. 오류 수정: buildTree에서 groups.length가 아닌 faces.length를 기준으로 adj를 만들었으므로
-        // adj를 사용하여 tree를 다시 빌드
         function buildTreeSim() {
             const maxId = groups.reduce((max, g) => Math.max(max, g.faceId), -1);
             if (maxId < 0) return { parent: [], order: [] };
@@ -200,7 +210,7 @@
                 
                 if (adj[f]) {
                      adj[f].forEach(n => {
-                        if (parent[n.to] === null) {
+                        if (parent[n.to] === null && n.to <= maxId) { 
                             parent[n.to] = f;
                             Q.push(n.to);
                         }
@@ -222,8 +232,14 @@
                 group.rotation.set(0, 0, 0); 
             });
 
+            // ⭐ World Matrix 업데이트: simulateFolding의 핵심 수정
+            // Scene 자체의 updateMatrixWorld를 호출 (engine.scene은 Three.Scene 인스턴스)
             engine.scene.updateMatrixWorld(true);
             
+            // centerOffset3D는 FoldEngine.js에서 계산되지만, 시뮬레이션 환경에서는 0으로 가정
+            // (loadNet에서 이미 중심을 (0,0,0)으로 이동시켰기 때문)
+            const centerOffsetSim = new THREE.Vector3(0,0,0); 
+
             order.forEach(faceId => {
                 const p = parent[faceId];
                 if (p === -1) return;
@@ -236,8 +252,7 @@
                 const relation = adj[p].find(x => x.to === faceId);
                 const parentFaceObj = faces.find(f => f.id === p);
                 
-                // ⭐ getAxisAndPointSim: FoldEngine.js의 getAxisAndPoint 로직을 복사/동기화
-                // (w=h=0인 면은 이미 필터링됨)
+                // getAxisAndPointSim (FoldEngine.js의 getAxisAndPoint 로직)
                 const parentEdges = getEdges(parentFaceObj);
                 const edge = parentEdges[relation.edgeA];
                 
@@ -247,8 +262,7 @@
                 const axis = new THREE.Vector3().subVectors(p2, p1).normalize();
                 const point = p1; 
                 
-                // engine.centerOffset3D를 가져오기 어려우므로, 0,0,0을 중심으로 가정
-                const worldPoint = point.clone().sub(new THREE.Vector3(0,0,0)); 
+                const worldPoint = point.clone().sub(centerOffsetSim); 
                 
                 const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
@@ -263,11 +277,12 @@
                 childGroup.position.add(localPoint);
             });
             
+            // 최종 위치에 대한 World Matrix 업데이트
             engine.scene.updateMatrixWorld(true);
 
         } catch (err) {
             console.warn("Simulator Fold Error:", err);
-            return fail("접기 시뮬레이션 중 오류가 발생했습니다. 전개도가 물리적으로 접을 수 없는 형태이거나, FoldEngine 로직에 문제가 있습니다.");
+            return fail("접기 시뮬레이션 중 오류가 발생했습니다: " + err.message);
         }
 
         // 성공적으로 fold되었는지 판단
@@ -292,7 +307,8 @@
 
         // FoldEngine의 matrixWorld가 최종 접힌 상태로 업데이트되어 있어야 함
         const groups = window.FoldEngine.getFaceGroups();
-        if (groups[0] && groups[0].parent) {
+        if (groups.length > 0 && groups[0].parent) {
+             // Scene의 updateMatrixWorld 호출
              groups[0].parent.updateMatrixWorld(true);
         }
 
@@ -309,19 +325,15 @@
     Validator.validateNet = function (net) {
         Validator.lastError = "";
 
-        // net에 유효한 6개 면이 있는지 확인
         if (!validateFaces(net)) return false;
 
-        // adj 생성
         const adj = buildAdjacency(net);
         if (!adj) return false;
 
         if (!checkConnectivity(adj)) return false;
 
-        // 시뮬레이션
         if (!simulateFolding(net, adj)) return false;
 
-        // 겹침 검사
         if (!checkOverlap()) return false;
 
         return true;

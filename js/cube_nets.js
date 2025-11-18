@@ -1,9 +1,9 @@
 /**
  * cube_nets.js
  *
- *  - 정육면체 전개도(6칸짜리 육소미노) 패턴 11개를 정의
+ *  - 정육면체 전개도(6칸짜리 육소미노) 패턴 11개 정의
  *  - 각 패턴은 격자 좌표(u, v)와 인접 정보(adjacency)를 가짐
- *  - 다른 스크립트에서 window.CubeNets 로 접근
+ *  - window.CubeNets 로 export
  */
 
 (function () {
@@ -148,7 +148,6 @@
         return JSON.parse(JSON.stringify(obj));
     }
 
-    // (u,v)만 가지고 faces/adja로 변환
     function buildNetFromCells(rawNet) {
         const faces = rawNet.cells.map(([u, v], idx) => ({
             id: idx,
@@ -159,6 +158,7 @@
         }));
 
         const adjacency = [];
+
         for (let i = 0; i < faces.length; i++) {
             for (let j = i + 1; j < faces.length; j++) {
                 const a = faces[i];
@@ -170,13 +170,17 @@
                 if (manhattan === 1) {
                     let dirAB, dirBA;
                     if (du === 1 && dv === 0) {
-                        dirAB = 'right'; dirBA = 'left';
+                        dirAB = 'right';
+                        dirBA = 'left';
                     } else if (du === -1 && dv === 0) {
-                        dirAB = 'left'; dirBA = 'right';
+                        dirAB = 'left';
+                        dirBA = 'right';
                     } else if (du === 0 && dv === 1) {
-                        dirAB = 'down'; dirBA = 'up';
+                        dirAB = 'down';
+                        dirBA = 'up';
                     } else if (du === 0 && dv === -1) {
-                        dirAB = 'up'; dirBA = 'down';
+                        dirAB = 'up';
+                        dirBA = 'down';
                     }
 
                     adjacency.push({ from: a.id, to: b.id, dir: dirAB });
@@ -267,9 +271,8 @@
     function getRandomPieceProblem() {
         const net = getRandomNet();
         if (!net.faces || net.faces.length !== 6) {
-            throw new Error('CubeNets: 잘못된 전개도 데이터.');
+            throw new Error('CubeNets: 잘못된 정육면체 전개도 데이터입니다.');
         }
-
         const removeIndex = Math.floor(Math.random() * net.faces.length);
         const removedFaceId = net.faces[removeIndex].id;
 
@@ -302,7 +305,6 @@
         getNetById,
         cloneNet,
         normalizeNet,
-
         getRandomPieceProblem,
         getRandomOverlapProblem
     };

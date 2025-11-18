@@ -152,8 +152,8 @@
         // --------------------------------------------------------
         if (window.THREE && THREE.OrbitControls) {
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.08;
+            // controls.enableDamping = true; //
+            // controls.dampingFactor = 0.08; //
             controls.enablePan = false;
             controls.target.set(0, 0, 0);
             controls.update();

@@ -1,9 +1,6 @@
 /**
- * foldEngine.js – Perfect Cube Folding Engine (Index-Safe Edition)
- * 
- * ✔ face.id가 0~5가 아닐 때도 정상 동작
- * ✔ adjacency는 index 기반
- * ✔ unfoldImmediate() 복구
+ * FoldEngine.js – Perfect Cube Folding Engine (Final Clean Version)
+ * 정육면체 전개도 전용
  */
 
 (function () {
@@ -13,16 +10,20 @@
     window.FoldEngine = FoldEngine;
 
     let scene, camera, renderer;
-    let faceGroups = [];
-    let facesSorted = [];
-    let adj = [];
-    let foldParent = [];
+
+    let faceGroups = [];      // THREE.Group (면)
+    let facesSorted = [];     // net.faces의 id 정렬본
+    let adj = [];             // adjacency (index 기반)
+    let foldParent = [];      // BFS tree (index 기반)
+    let initialMatrices = []; // unfold 좌표계 저장
 
     FoldEngine.currentNet = null;
 
-    // -------------------------
-    // Init Three.js
-    // -------------------------
+    const EPS = 1e-6;
+
+    // ===============================
+    // INIT THREE
+    // ===============================
     FoldEngine.init = function (canvas) {
         if (!renderer) {
             renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -42,62 +43,63 @@
         camera.lookAt(0, 0, 0);
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+
         const light = new THREE.DirectionalLight(0xffffff, 1);
         light.position.set(4, 5, 6);
         scene.add(light);
     };
 
-    // -------------------------
-    // Geometry
-    // -------------------------
-    function createGeom() {
+    // ===============================
+    // CREATE GEOMETRY (정육면체 전용)
+    // ===============================
+    function createFaceGeometry() {
         const g = new THREE.Geometry();
         g.vertices.push(
             new THREE.Vector3(-0.5, -0.5, 0),
-            new THREE.Vector3(0.5, -0.5, 0),
+            new THREE.VectorVector3(0.5, -0.5, 0),
             new THREE.Vector3(0.5, 0.5, 0),
             new THREE.Vector3(-0.5, 0.5, 0)
         );
-        g.faces.push(new THREE.Face3(0,1,2));
-        g.faces.push(new THREE.Face3(0,2,3));
+        g.faces.push(new THREE.Face3(0, 1, 2));
+        g.faces.push(new THREE.Face3(0, 2, 3));
         g.computeFaceNormals();
         return g;
     }
 
-    // -------------------------
-    // Build adjacency by INDEX
-    // -------------------------
+    // ===============================
+    // BUILD ADJACENCY (index 기반)
+    // ===============================
     function buildAdjacency() {
         const N = facesSorted.length;
-        adj = [...Array(N)].map(()=>[]);
+        adj = [...Array(N)].map(() => []);
 
-        function edges(face) {
+        function edges(f) {
             return [
-                { a:[face.u, face.v], b:[face.u+1, face.v] },
-                { a:[face.u+1, face.v], b:[face.u+1, face.v+1] },
-                { a:[face.u+1, face.v+1], b:[face.u, face.v+1] },
-                { a:[face.u, face.v+1], b:[face.u, face.v] }
+                { a: [f.u, f.v], b: [f.u + 1, f.v] },
+                { a: [f.u + 1, f.v], b: [f.u + 1, f.v + 1] },
+                { a: [f.u + 1, f.v + 1], b: [f.u, f.v + 1] },
+                { a: [f.u, f.v + 1], b: [f.u, f.v] }
             ];
         }
 
         function sameEdge(e1, e2) {
             return (
-                Math.abs(e1.a[0]-e2.b[0]) < 1e-6 &&
-                Math.abs(e1.a[1]-e2.b[1]) < 1e-6 &&
-                Math.abs(e1.b[0]-e2.a[0]) < 1e-6 &&
-                Math.abs(e1.b[1]-e2.a[1]) < 1e-6
+                Math.abs(e1.a[0] - e2.b[0]) < EPS &&
+                Math.abs(e1.a[1] - e2.b[1]) < EPS &&
+                Math.abs(e1.b[0] - e2.a[0]) < EPS &&
+                Math.abs(e1.b[1] - e2.a[1]) < EPS
             );
         }
 
-        for (let i=0;i<N;i++) {
+        for (let i = 0; i < N; i++) {
             const Ei = edges(facesSorted[i]);
-            for (let j=i+1;j<N;j++) {
+            for (let j = i + 1; j < N; j++) {
                 const Ej = edges(facesSorted[j]);
-                for (let ei=0;ei<4;ei++) {
-                    for (let ej=0;ej<4;ej++) {
+                for (let ei = 0; ei < 4; ei++) {
+                    for (let ej = 0; ej < 4; ej++) {
                         if (sameEdge(Ei[ei], Ej[ej])) {
-                            adj[i].push({ to:j, edgeA:ei, edgeB:ej });
-                            adj[j].push({ to:i, edgeA:ej, edgeB:ei });
+                            adj[i].push({ to: j, edgeA: ei, edgeB: ej });
+                            adj[j].push({ to: i, edgeA: ej, edgeB: ei });
                         }
                     }
                 }
@@ -105,9 +107,9 @@
         }
     }
 
-    // -------------------------
-    // Build folding tree index-based
-    // -------------------------
+    // ===============================
+    // BUILD BFS TREE
+    // ===============================
     function buildTree() {
         const N = facesSorted.length;
         foldParent = Array(N).fill(null);
@@ -116,12 +118,9 @@
         foldParent[root] = -1;
 
         const Q = [root];
-        const order = [];
 
         while (Q.length) {
             const f = Q.shift();
-            order.push(f);
-
             adj[f].forEach(rel => {
                 if (foldParent[rel.to] === null) {
                     foldParent[rel.to] = f;
@@ -129,39 +128,35 @@
                 }
             });
         }
-
-        return order;
     }
 
-    // -------------------------
-    // Load Net
-    // -------------------------
+    // ===============================
+    // LOAD NET
+    // ===============================
     FoldEngine.loadNet = function (net) {
         FoldEngine.currentNet = net;
 
-        facesSorted = [...net.faces].sort((a,b)=>a.id-b.id);
-
-        // create face groups
+        facesSorted = [...net.faces].sort((a, b) => a.id - b.id);
         faceGroups = [];
-        facesSorted.forEach(face => {
-            const g = new THREE.Group();
-            g.userData.face = face;
+        initialMatrices = [];
 
-            const geom = createGeom();
+        // faceGroups 생성
+        facesSorted.forEach(f => {
+            const g = new THREE.Group();
+            const geom = createFaceGeometry();
             const mesh = new THREE.Mesh(
                 geom,
-                new THREE.MeshLambertMaterial({ color:0xffffff, side:THREE.DoubleSide })
+                new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })
             );
 
             const edgeGeom = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edgeGeom, new THREE.LineBasicMaterial({ color:0x333333 }));
+            const line = new THREE.LineSegments(edgeGeom, new THREE.LineBasicMaterial({ color: 0x333333 }));
 
             g.add(mesh);
             g.add(line);
 
-            // initial pos = uv
-            g.position.set(face.u, -face.v, 0);
-            g.updateMatrix();
+            g.position.set(f.u, -f.v, 0);
+            g.updateMatrixWorld(true);
 
             scene.add(g);
             faceGroups.push(g);
@@ -169,88 +164,89 @@
 
         scene.updateMatrixWorld(true);
 
-        // build adj + tree
         buildAdjacency();
-        const order = buildTree();
+        buildTree();
 
-        // parent-child relink (index-based)
-        for (let i=0;i<facesSorted.length;i++) {
-            const p = foldParent[i];
-            if (p === -1) continue;
-
-            const parentGroup = faceGroups[p];
-            const childGroup  = faceGroups[i];
-            scene.remove(childGroup);
-            parentGroup.add(childGroup);
-        }
-
-        scene.updateMatrixWorld(true);
+        // unfold 좌표 저장
+        faceGroups.forEach(g => {
+            initialMatrices.push(g.matrixWorld.clone());
+        });
 
         return Promise.resolve();
     };
 
-    // -------------------------
-    // Unfold immediate (all rotations 0)
-    // -------------------------
+    // ===============================
+    // UNFOLD IMMEDIATE
+    // ===============================
     FoldEngine.unfoldImmediate = function () {
-        faceGroups.forEach(g => {
-            g.rotation.set(0,0,0);
-            g.updateMatrixWorld(true);
+        faceGroups.forEach((g, i) => {
+            g.matrix.copy(initialMatrices[i]);
+            g.matrixWorld.copy(initialMatrices[i]);
         });
         renderer.render(scene, camera);
     };
 
-    // -------------------------
-    // Fold one child
-    // -------------------------
+    // ===============================
+    // ROTATE CHILD (행렬 기반)
+    // ===============================
     function rotateChild(parentIdx, childIdx, angle) {
-        const parent = faceGroups[parentIdx];
-        const child  = faceGroups[childIdx];
-
         const rel = adj[parentIdx].find(r => r.to === childIdx);
         if (!rel) return;
 
-        const f = rel.edgeA;
         const face = facesSorted[parentIdx];
+        const A = new THREE.Vector3(
+            face.u + (rel.edgeA === 0 || rel.edgeA === 3 ? 0 : 1),
+            -(face.v + (rel.edgeA === 0 || rel.edgeA === 1 ? 0 : 1)),
+            0
+        );
+        const B = new THREE.Vector3(
+            face.u + (rel.edgeA === 0 || rel.edgeA === 1 ? 1 : 0),
+            -(face.v + (rel.edgeA === 1 || rel.edgeA === 2 ? 1 : 0)),
+            0
+        );
 
-        const corners = [
-            [face.u, face.v],
-            [face.u+1, face.v],
-            [face.u+1, face.v+1],
-            [face.u, face.v+1]
-        ];
+        // parent transform
+        const parentMat = initialMatrices[parentIdx];
+        const Aw = A.clone().applyMatrix4(parentMat);
+        const Bw = B.clone().applyMatrix4(parentMat);
 
-        const A = new THREE.Vector3(corners[f][0], -corners[f][1], 0);
-        const B = new THREE.Vector3(corners[(f+1)%4][0], -corners[(f+1)%4][1], 0);
-
-        parent.updateMatrixWorld(true);
-        child.updateMatrixWorld(true);
-
-        const Aw = A.clone().applyMatrix4(parent.matrixWorld);
-        const Bw = B.clone().applyMatrix4(parent.matrixWorld);
         const axis = Bw.clone().sub(Aw).normalize();
 
-        child.rotateOnWorldAxis(axis, angle);
+        const pivot = Aw;
+        const childMat0 = initialMatrices[childIdx];
+
+        // M_child = T(p) * R(axis,angle) * T(-p) * M_child0
+        const T1 = new THREE.Matrix4().makeTranslation(pivot.x, pivot.y, pivot.z);
+        const R = new THREE.Matrix4().makeRotationAxis(axis, angle);
+        const T2 = new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z);
+
+        const M = new THREE.Matrix4();
+        M.multiplyMatrices(T1, R);
+        M.multiply(T2);
+        M.multiply(childMat0);
+
+        faceGroups[childIdx].matrix.copy(M);
+        faceGroups[childIdx].matrixWorld.copy(M);
     }
 
-    // -------------------------
-    // foldAnimate
-    // -------------------------
-    FoldEngine.foldAnimate = function (sec=1) {
+    // ===============================
+    // FOLD ANIMATE
+    // ===============================
+    FoldEngine.foldAnimate = function (sec = 1) {
         return new Promise(resolve => {
             const start = performance.now();
-            const N = facesSorted.length;
 
             function step(t) {
-                const prog = Math.min(1, (t-start)/(sec*1000));
-                const angle = prog * (Math.PI/2);
+                const prog = Math.min(1, (t - start) / (sec * 1000));
+                const angle = prog * (Math.PI / 2);
 
                 // reset
-                faceGroups.forEach(g => { g.rotation.set(0,0,0); });
-                scene.updateMatrixWorld(true);
+                faceGroups.forEach((g, i) => {
+                    g.matrix.copy(initialMatrices[i]);
+                    g.matrixWorld.copy(initialMatrices[i]);
+                });
 
-                // fold in tree order
-                for (let i=0;i<N;i++) {
+                for (let i = 0; i < facesSorted.length; i++) {
                     const p = foldParent[i];
                     if (p === -1) continue;
                     rotateChild(p, i, angle);
@@ -266,29 +262,30 @@
         });
     };
 
-    // -------------------------
-    // showSolvedView
-    // -------------------------
-    FoldEngine.showSolvedView = function(sec=1.5) {
-        return new Promise(resolve=>{
+    // ===============================
+    // SHOW SOLVED VIEW
+    // ===============================
+    FoldEngine.showSolvedView = function (sec = 1.5) {
+        return new Promise(resolve => {
             const start = performance.now();
 
-            function step(t){
-                const prog = Math.min(1,(t-start)/(sec*1000));
-                const th = prog * (Math.PI/4);
+            function step(t) {
+                const prog = Math.min(1, (t - start) / (sec * 1000));
+                const th = prog * (Math.PI / 4);
 
                 camera.position.set(
                     6 * Math.sin(th),
                     3,
                     6 * Math.cos(th)
                 );
-                camera.lookAt(0,0,0);
+                camera.lookAt(0, 0, 0);
 
-                renderer.render(scene,camera);
+                renderer.render(scene, camera);
 
-                if(prog<1) requestAnimationFrame(step);
+                if (prog < 1) requestAnimationFrame(step);
                 else resolve();
             }
+
             requestAnimationFrame(step);
         });
     };

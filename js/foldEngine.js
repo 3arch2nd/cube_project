@@ -561,11 +561,11 @@
         layoutFlat2D();
 
         // 6) 카메라/컨트롤 타겟 초기화 (문제 로딩 시 항상 초기 상태로 돌아감)
-        camera.position.set(0, 0, 8); // ⭐ 카메라 위치를 0, 0, 8로 재설정 (위에서 보는 시점)
+        camera.position.set(0, 0, 8); // 카메라 위치를 0, 0, 8로 재설정
         camera.lookAt(0, 0, 0);
         
         if (controls) {
-            controls.reset(); // ⭐ OrbitControls의 내부 회전 상태를 완전히 초기화
+            controls.reset(); // OrbitControls의 내부 회전 상태를 완전히 초기화
             controls.target.set(0, 0, 0);
             controls.update();
         }
@@ -603,10 +603,10 @@
 // --------------------------------------------------------------------
     // PUBLIC: showSolvedView – 자동 회전 기능 제거, OrbitControls 즉시 활성화 보장
     // --------------------------------------------------------------------
-    FoldEngine.showSolvedView = function (sec = 1.0) { // ⭐ 1.0초 동안 카메라 이동
+    FoldEngine.showSolvedView = function (sec = 1.0) { // 1.0초 동안 카메라 이동
         return new Promise(resolve => {
             
-            // ⭐ 핵심 수정 1: 카메라 위치와 시점을 목표 위치로 보간
+            // ⭐ 핵심 수정 1: 카메라 이동 보간 로직을 재도입하여 부드러운 중앙 이동 보장
             const startPosition = camera.position.clone();
             const endPosition = new THREE.Vector3(0, 0, 8); // 최종 위치: 정면, 거리 8
             const start = performance.now();

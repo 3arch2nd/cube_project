@@ -20,7 +20,7 @@
     // OrbitControls
     let controls = null;
     let animationStarted = false;
-    let isAutoCameraMoving = false;
+    // let isAutoCameraMoving = false; // ❌ 삭제: 이 플래그가 컨트롤 업데이트를 막았습니다.
 
     // ------------------------------------------------------------
     // 전개도 데이터
@@ -98,8 +98,10 @@
         function loop() {
             requestAnimationFrame(loop);
 
-            if (controls && !isAutoCameraMoving) {
-                controls.update();
+            // ✨ 수정: controls가 유효하면 무조건 update를 호출합니다.
+            // isAutoCameraMoving 플래그 조건을 제거했습니다.
+            if (controls) {
+                controls.update(); 
             }
 
             renderer.render(scene, camera);
@@ -136,7 +138,7 @@
             0.1,
             200
         );
-        camera.position.set(0, 0, 8); // ✨ 수정 1: 카메라 거리를 10에서 8로 조정
+        camera.position.set(0, 0, 8); // 카메라 거리를 10에서 8로 조정
         camera.lookAt(0, 0, 0);
 
         const amb = new THREE.AmbientLight(0xffffff, 0.9);
@@ -594,8 +596,7 @@
     // --------------------------------------------------------------------
     FoldEngine.showSolvedView = function () {
         return new Promise(resolve => {
-            // ✨ 수정 1: 자동 카메라 이동 플래그를 무조건 false로 설정합니다.
-            isAutoCameraMoving = false; 
+            // isAutoCameraMoving 플래그를 변수 자체에서 제거했으므로, 여기서는 아무것도 할 필요가 없습니다.
 
             // OrbitControls 복구 및 타겟 재설정
             if (controls) {
@@ -603,7 +604,6 @@
                 controls.target.set(0, 0, 0);
                 controls.update();
             }
-            // ★ 접힌 후 중앙에 고정하고 OrbitControls를 즉시 사용자에게 넘깁니다.
             resolve();
         });
     };

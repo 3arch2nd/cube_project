@@ -1,5 +1,8 @@
 /**
- * main.js – 정육면체 전개도/겹침 통합
+ * main.js – 정육면체 전개도/겹침 통합 최신 버전
+ *  - 전개도 완성하기
+ *  - 겹쳐지는 부분 찾기
+ *  - ui.js / validator.js / foldEngine.js / overlap.js 와 연동
  */
 
 (function () {
@@ -29,6 +32,9 @@
 
     let netCanvas, threeCanvas;
 
+    // ------------------------------------------------
+    // 초기화
+    // ------------------------------------------------
     document.addEventListener("DOMContentLoaded", init);
 
     function init() {
@@ -41,6 +47,7 @@
         bindProblemButtons();
         bindQRPopup();
 
+        // 기본 선택 상태
         document
             .querySelector("#net-run-group button[data-run='practice']")
             .classList.add("selected");
@@ -54,6 +61,9 @@
         showPage("mode-select-page");
     }
 
+    // ------------------------------------------------
+    // 페이지 전환
+    // ------------------------------------------------
     function showPage(pageId) {
         const pages = [
             "mode-select-page",
@@ -73,7 +83,7 @@
     }
 
     // ------------------------------------------------
-    // 모드 선택
+    // 모드 선택 화면
     // ------------------------------------------------
     function bindModeSelectPage() {
         document.getElementById("btn-mode-net").addEventListener("click", () => {
@@ -91,6 +101,7 @@
     // 전개도 완성하기 설정
     // ------------------------------------------------
     function bindNetSetupPage() {
+        // 연습 / 실전 선택
         document.querySelectorAll("#net-run-group button").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#net-run-group button")
@@ -100,6 +111,7 @@
             });
         });
 
+        // 문항 수 조절
         const disp = document.getElementById("net-q-display");
         document.getElementById("net-q-minus").addEventListener("click", () => {
             problemCount = Math.max(1, problemCount - 1);
@@ -110,6 +122,7 @@
             disp.textContent = problemCount;
         });
 
+        // 시작 버튼
         document.getElementById("start-net").addEventListener("click", startNetProblems);
     }
 
@@ -117,6 +130,7 @@
     // 겹침 찾기 설정
     // ------------------------------------------------
     function bindOverlapSetupPage() {
+        // 점/선/둘 다
         document.querySelectorAll("#ov-type-group button").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#ov-type-group button")
@@ -126,6 +140,7 @@
             });
         });
 
+        // 연습 / 실전
         document.querySelectorAll("#ov-run-group button").forEach(btn => {
             btn.addEventListener("click", () => {
                 document.querySelectorAll("#ov-run-group button")
@@ -135,6 +150,7 @@
             });
         });
 
+        // 문항 수
         const disp = document.getElementById("ov-q-display");
         document.getElementById("ov-q-minus").addEventListener("click", () => {
             problemCount = Math.max(1, problemCount - 1);
@@ -145,11 +161,12 @@
             disp.textContent = problemCount;
         });
 
+        // 시작 버튼
         document.getElementById("start-overlap").addEventListener("click", startOverlapProblems);
     }
 
     // ------------------------------------------------
-    // 문제 생성
+    // 문제 생성 함수들
     // ------------------------------------------------
     function generateOneNetProblem() {
         const p = CubeNets.getRandomPieceProblem();
@@ -170,6 +187,9 @@
         };
     }
 
+    // ------------------------------------------------
+    // 모드별 시작
+    // ------------------------------------------------
     function startNetProblems() {
         problems = [];
         for (let i = 0; i < problemCount; i++) {
@@ -191,7 +211,7 @@
     }
 
     // ------------------------------------------------
-    // 문제 로드
+    // 문제 로딩
     // ------------------------------------------------
     async function loadProblem() {
         currentProblem = problems[currentIndex];
@@ -202,11 +222,14 @@
             return;
         }
 
-        document.getElementById("btn-next").classList.add("hidden");
+        // 버튼 상태
+        const btnNext = document.getElementById("btn-next");
         const btnCheck = document.getElementById("btn-check");
+        btnNext.classList.add("hidden");
         btnCheck.classList.remove("hidden");
         btnCheck.disabled = false;
 
+        // 제목
         const title = document.getElementById("problem-title");
         const idx = currentIndex + 1;
 
@@ -216,6 +239,7 @@
             title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
         }
 
+        // 2D 전개도 초기화 / 렌더
         UI.init(netCanvas);
         UI.clear();
 
@@ -225,10 +249,12 @@
         }
         UI.renderNet(currentProblem.net, opt);
 
+        // 3D 엔진 초기화 및 전개도 상태 표시
         FoldEngine.init(threeCanvas);
 
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
 
+        // 전개도 완성 모드에서는 빠진 조각을 3D에는 뺀 상태로 보여줌
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
             const removedId = window.UI.getRemovedFaceId();
             const idxFace = netFor3D.faces.findIndex(f => f.id === removedId);
@@ -240,15 +266,17 @@
         await FoldEngine.loadNet(netFor3D);
         FoldEngine.unfoldImmediate();
 
+        // 겹침 모드라면 선택 초기화
         if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
             Overlap.startSelection(currentProblem.net);
         }
     }
 
     // ------------------------------------------------
-    // 버튼 바인딩 (정답 확인/다음/종료)
+    // 정답 확인 / 다음 / 종료 버튼
     // ------------------------------------------------
     function bindProblemButtons() {
+        // 정답 확인
         document.getElementById("btn-check").addEventListener("click", async () => {
             const btnCheck = document.getElementById("btn-check");
             btnCheck.disabled = true;
@@ -258,13 +286,13 @@
 
             if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
                 const placedPos = window.UI.placed;
-
                 if (!placedPos) {
                     alert("조각이 배치되지 않았습니다.");
                     btnCheck.disabled = false;
                     return;
                 }
 
+                // 학생이 놓은 위치를 반영한 6면 전개도 구성
                 netForFold = JSON.parse(JSON.stringify(currentProblem.net));
                 const removedId = window.UI.getRemovedFaceId();
 
@@ -285,25 +313,29 @@
                     netForFold.faces.sort((a, b) => a.id - b.id);
                 }
 
+                // 3D로 로드 후 검증
                 await FoldEngine.loadNet(netForFold);
                 correct = Validator.validateNet(netForFold);
+
             } else {
+                // 겹침 찾기 모드
                 await FoldEngine.loadNet(netForFold);
                 correct = window.Overlap.checkUserAnswer(netForFold);
             }
 
+            // 다시 평면 상태에서 시작 → 접기 애니메이션
             FoldEngine.unfoldImmediate();
 
             FoldEngine
-                .foldAnimate(1.5)
-                .then(() => FoldEngine.showSolvedView(1.5))
+                .foldAnimate(1.5)          // 접기 속도 (조금 느리게)
+                .then(() => FoldEngine.showSolvedView(1.5)) // 회전
                 .then(() => {
                     if (correct) {
                         alert("정답입니다! 🎉");
                         btnCheck.classList.add("hidden");
                         document.getElementById("btn-next").classList.remove("hidden");
                     } else {
-                        // 요청: 메시지 단순하게
+                        // 요청: 문구 단순화
                         alert("다시 생각해 볼까요? 🤔");
 
                         btnCheck.disabled = false;
@@ -315,7 +347,7 @@
                                 Overlap.startSelection(currentProblem.net);
                                 UI.renderNet(currentProblem.net, {});
                             } else {
-                                // 같은 문제 계속 보여주기
+                                // 같은 문제, 같은 후보 위치 다시 보여주기
                                 UI.renderNet(currentProblem.net, { highlightPositions: true });
                             }
                         }, 1500);
@@ -328,6 +360,7 @@
                 });
         });
 
+        // 다음 문제
         document.getElementById("btn-next").addEventListener("click", () => {
             currentIndex++;
             if (currentIndex >= problemCount) {
@@ -337,6 +370,7 @@
             }
         });
 
+        // 종료
         document.getElementById("btn-exit").addEventListener("click", () => {
             if (confirm("처음 화면으로 돌아갈까요?")) {
                 showPage("mode-select-page");
@@ -346,9 +380,10 @@
 
     // ------------------------------------------------
     // 결과 페이지
+    //  (지금은 단순히 '푼 문제 수 / 전체' 비율로 표시)
     // ------------------------------------------------
     function showResultPage() {
-        const correctCount = currentIndex; // 간단히 현재 index를 정답 개수로 사용
+        const correctCount = currentIndex; // 추후 정답 개수 별도 집계 가능
 
         showPage("result-page");
         document.getElementById("result-acc").textContent =

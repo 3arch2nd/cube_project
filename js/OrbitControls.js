@@ -152,17 +152,17 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	}
 
-	// ✨ 수정 1: rotateLeft 함수를 this에 바인딩
+	// ✨ 수정 3a: rotateLeft 함수를 this에 바인딩하여 호출 오류 해결
 	this.rotateLeft = function ( angle ) {
 		sphericalDelta.theta -= angle;
 	};
 
-	// ✨ 수정 1: rotateUp 함수를 this에 바인딩
+	// ✨ 수정 3a: rotateUp 함수를 this에 바인딩하여 호출 오류 해결
 	this.rotateUp = function ( angle ) {
 		sphericalDelta.phi -= angle;
 	};
 
-	// ✨ 수정 2: panLeft 함수를 this에 바인딩
+	// ✨ 수정 3b: panLeft 함수를 this에 바인딩
 	this.panLeft = ( function() {
 
 		var v = new THREE.Vector3();
@@ -178,7 +178,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	} )();
 
-	// ✨ 수정 2: panUp 함수를 this에 바인딩
+	// ✨ 수정 3b: panUp 함수를 this에 바인딩
 	this.panUp = ( function() {
 
 		var v = new THREE.Vector3();
@@ -200,7 +200,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
 
-		if ( scope.object.perspective ) {
+		if ( scope.object.isPerspectiveCamera || scope.object.perspective ) { // ✨ 수정 2: 카메라 유형 검사 보강
 
 			// perspective
 
@@ -212,8 +212,8 @@ THREE.OrbitControls = function ( object, domElement ) {
 			targetDistance *= Math.tan( ( scope.object.fov / 2 ) * Math.PI / 180.0 );
 
 			// we actually don't use screen width here, since the screen can be any aspect ratio
-			scope.panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix ); // ✨ this.panLeft 대신 scope.panLeft 그대로 사용
-			scope.panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix ); // ✨ this.panUp 대신 scope.panUp 그대로 사용
+			scope.panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix );
+			scope.panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix );
 
 		} else if ( scope.object.orthographic ) {
 
@@ -234,7 +234,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	this.dollyIn = function ( dollyScale ) {
 
-		if ( scope.object.perspective ) {
+		if ( scope.object.isPerspectiveCamera || scope.object.perspective ) { // ✨ 수정 2: 카메라 유형 검사 보강
 
 			scale /= dollyScale;
 
@@ -255,7 +255,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	this.dollyOut = function ( dollyScale ) {
 
-		if ( scope.object.perspective ) {
+		if ( scope.object.isPerspectiveCamera || scope.object.perspective ) { // ✨ 수정 2: 카메라 유형 검사 보강
 
 			scale *= dollyScale;
 
@@ -280,7 +280,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		// so camera.up is the orbit axis
 		var quat = new THREE.Quaternion().setFromUnitVectors( object.up, new THREE.Vector3( 0, 1, 0 ) );
-		var quatInverse = quat.clone().inverse();
+		var quatInverse = quat.clone().invert(); // ✨ 수정 1: .inverse() -> .invert()로 변경
 
 		var lastPosition = new THREE.Vector3();
 		var lastQuaternion = new THREE.Quaternion();
@@ -299,7 +299,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 			if ( scope.autoRotate && state === STATE.NONE ) {
 
-				scope.rotateLeft( getAutoRotationAngle() ); // ✨ rotateLeft 호출 방식 수정
+				scope.rotateLeft( getAutoRotationAngle() );
 
 			}
 
@@ -411,7 +411,8 @@ THREE.OrbitControls = function ( object, domElement ) {
 			direction = new THREE.Vector3().subVectors( vector, scope.object.position ),
 			distance;
 
-		if ( scope.object.perspective ) {
+		// ✨ 수정 2: 카메라 유형 검사 보강
+		if ( scope.object.isPerspectiveCamera || scope.object.perspective ) { 
 
 			direction.normalize();
 			distance = - scope.object.position.dot( projection ) / direction.dot( projection );

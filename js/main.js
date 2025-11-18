@@ -1,5 +1,5 @@
 /**
- * main.js – 정육면체 전개도/겹침 찾기 통합
+ * main.js – 화면/버튼/문제 진행 전체 통합
  */
 
 (function () {
@@ -107,6 +107,7 @@
                 document.querySelectorAll("#ov-type-group button")
                     .forEach(b => b.classList.remove("selected"));
                 btn.classList.add("selected");
+
                 overlapMode = btn.dataset.type;
             });
         });
@@ -145,6 +146,7 @@
 
     function generateOneOverlapProblem() {
         const netObj = CubeNets.getRandomOverlapProblem(overlapMode);
+
         return {
             mode: MAIN_MODE.OVERLAP_FIND,
             solid: "cube",
@@ -213,8 +215,10 @@
 
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
             const removedId = window.UI.getRemovedFaceId();
-            const idxF = netFor3D.faces.findIndex(f => f.id === removedId);
-            if (idxF !== -1) netFor3D.faces.splice(idxF, 1);
+            const removedFaceIndex = netFor3D.faces.findIndex(f => f.id === removedId);
+            if (removedFaceIndex !== -1) {
+                netFor3D.faces.splice(removedFaceIndex, 1);
+            }
         }
 
         await FoldEngine.loadNet(netFor3D);
@@ -262,16 +266,17 @@
                 }
 
                 await FoldEngine.loadNet(netForFold);
+
                 correct = Validator.validateNet(netForFold);
+
             } else {
-                // 겹침 찾기 모드
                 await FoldEngine.loadNet(netForFold);
                 correct = window.Overlap.checkUserAnswer(netForFold);
             }
 
             FoldEngine.unfoldImmediate();
 
-            FoldEngine.foldAnimate(1.5)         // ← 여기 1.5초
+            FoldEngine.foldAnimate(1.5)
                 .then(() => FoldEngine.showSolvedView(1.5))
                 .then(() => {
                     if (correct) {
@@ -279,7 +284,8 @@
                         document.getElementById("btn-check").classList.add("hidden");
                         document.getElementById("btn-next").classList.remove("hidden");
                     } else {
-                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔\n" + (Validator.lastError || ""));
+                        // 오답 메시지 단순화
+                        alert("다시 생각해 볼까요?");
 
                         document.getElementById("btn-check").disabled = false;
 
@@ -290,13 +296,15 @@
                                 Overlap.startSelection(currentProblem.net);
                                 UI.renderNet(currentProblem.net, {});
                             } else {
-                                // 같은 문제 다시
+                                // 같은 문제 그대로, 조각 위치에 빗금 표시
+                                UI.isWrong = true;
                                 UI.renderNet(currentProblem.net, {
                                     removeOne: true,
-                                    highlightPositions: true
+                                    highlightPositions: true,
+                                    markWrong: true
                                 });
                             }
-                        }, 1500);
+                        }, 400);
                     }
                 })
                 .catch(err => {
@@ -323,7 +331,7 @@
     }
 
     function showResultPage() {
-        const correctCount = currentIndex; // TODO: 정답 개수 따로 카운트하려면 수정 가능
+        const correctCount = currentIndex; // 간단히: 푼 문제 수 = 맞춘 문제 수 가정(실전 모드 확장 가능)
 
         showPage("result-page");
         document.getElementById("result-acc").textContent =

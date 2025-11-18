@@ -1,7 +1,9 @@
 /**
- * foldEngine.js – Cube 전개도 접기 엔진
+ * foldEngine.js – 정육면체 전개도 접기 엔진
  *
- * (지금은 정육면체/직육면체 모두 되지만, 정육면체만 써도 무방)
+ * 전제:
+ *  - net.faces: [{ id, u, v, w, h }, ...]
+ *  - (u, v)는 전개도 상의 왼쪽-위 좌표, w/h는 가로/세로 길이
  */
 
 (function () {
@@ -15,13 +17,13 @@
     let parentOf = [];     // folding tree
     FoldEngine.currentNet = null; 
 
-    const WHITE = 0xffffff;
+    const WHITE   = 0xffffff;
     const OUTLINE = 0x333333;
-    const EPS = 1e-6;
-    
-    // (지금은 안 써도 무방하지만 남겨둠)
-    let centerOffset3D = new THREE.Vector3(0, 0, 0);
+    const EPS     = 1e-6;
 
+    // 전개도 중심 (u, v) → 3D 기준점
+    let netCenterU = 0;
+    let netCenterV = 0;
 
     // ---------------------------------------
     //  Three.js 초기화
@@ -58,21 +60,41 @@
     };
 
     // ---------------------------------------
-    // face geometry 생성 (w × h)
+    // face의 로컬 꼭짓점(전개도 중심 기준) 계산
+    // cornersLocal: [TL, TR, BR, BL]
     // ---------------------------------------
-    function createFaceGeometry(w, h) {
+    function computeCornersLocal(face) {
+        const u = face.u;
+        const v = face.v;
+        const w = face.w;
+        const h = face.h;
+
+        // 전개도 (u, v) 기준 → 3D:
+        // x = u - netCenterU
+        // y = -(v - netCenterV)
+        const x0 = u - netCenterU;
+        const x1 = u + w - netCenterU;
+        const yTop    = -(v - netCenterV);
+        const yBottom = -((v + h) - netCenterV);
+
+        const TL = new THREE.Vector3(x0, yTop, 0);
+        const TR = new THREE.Vector3(x1, yTop, 0);
+        const BR = new THREE.Vector3(x1, yBottom, 0);
+        const BL = new THREE.Vector3(x0, yBottom, 0);
+
+        return [TL, TR, BR, BL];
+    }
+
+    // ---------------------------------------
+    // cornersLocal을 이용해 Geometry 생성
+    // ---------------------------------------
+    function createFaceGeometryFromCorners(cornersLocal) {
         const geom = new THREE.Geometry();
 
-        const hw = w / 2;
-        const hh = h / 2;
+        // cornersLocal: [TL, TR, BR, BL]
+        cornersLocal.forEach(c => geom.vertices.push(c.clone()));
 
-        geom.vertices.push(
-            new THREE.Vector3(-hw, -hh, 0),
-            new THREE.Vector3(hw, -hh, 0),
-            new THREE.Vector3(hw, hh, 0),
-            new THREE.Vector3(-hw, hh, 0)
-        );
-
+        // 두 삼각형으로 면 구성 (시계/반시계는 크게 중요치 않음)
         geom.faces.push(new THREE.Face3(0, 1, 2));
         geom.faces.push(new THREE.Face3(0, 2, 3));
         geom.computeFaceNormals();
@@ -88,11 +110,12 @@
 
         // 리셋
         faceGroups = [];
-        const objectsToRemove = scene.children.filter(obj => obj.type === 'Group');
-        objectsToRemove.forEach(obj => scene.remove(obj));
+        const groupsToRemove = scene.children.filter(obj => obj.type === 'Group');
+        groupsToRemove.forEach(obj => scene.remove(obj));
         
         const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
-        
+
+        // 전개도 전체 중심 계산 (u, v 기준)
         let minU = Infinity, maxU = -Infinity;
         let minV = Infinity, maxV = -Infinity;
         
@@ -103,19 +126,22 @@
             maxV = Math.max(maxV, f.v + f.h);
         }
         
-        const netCenterU = (minU + maxU) / 2;
-        const netCenterV = (minV + maxV) / 2;
-        
-        centerOffset3D.set(netCenterU, -netCenterV, 0);
+        netCenterU = (minU + maxU) / 2;
+        netCenterV = (minV + maxV) / 2;
 
         // faceGroup 생성
         validFaces.forEach(face => {
-            const { id, u, v, w, h } = face;
+            const { id } = face;
 
             const group = new THREE.Group();
             group.faceId = id; 
+            group.matrixAutoUpdate = true;
 
-            const geom = createFaceGeometry(w, h);
+            // 1) cornersLocal 계산 (전개도 중심 기준 로컬 좌표)
+            const cornersLocal = computeCornersLocal(face);
+
+            // 2) geometry 생성
+            const geom = createFaceGeometryFromCorners(cornersLocal);
             const mat = new THREE.MeshLambertMaterial({
                 color: WHITE,
                 side: THREE.DoubleSide
@@ -132,27 +158,25 @@
 
             group.add(mesh);
             group.add(line);
-            
-            group.matrixAutoUpdate = false; 
 
-            const faceCenterX = u + w / 2;
-            const faceCenterY = v + h / 2;
-            
-            const initialPos = new THREE.Vector3(
-                faceCenterX - netCenterU, 
-                -(faceCenterY - netCenterV), 
-                0
-            );
+            // 3) group 초기 상태 (모두 동일)
+            group.position.set(0, 0, 0);
+            group.rotation.set(0, 0, 0);
+            group.updateMatrixWorld(true);
 
-            group.position.copy(initialPos);
-            group.updateMatrix(); 
-            group.userData.initialPos = initialPos.clone(); 
-            group.userData.netInfo = { w, h, u, v }; 
+            // 4) 초기 상태 & 면 정보 저장
+            group.userData.initialPosition   = group.position.clone();
+            group.userData.initialQuaternion = group.quaternion.clone();
+            group.userData.netInfo  = {
+                u: face.u, v: face.v, w: face.w, h: face.h
+            };
+            group.userData.cornersLocal = cornersLocal.map(c => c.clone());
 
             scene.add(group);
             faceGroups.push(group);
         });
 
+        // id 순서 정렬
         faceGroups.sort((a, b) => a.faceId - b.faceId);
         
         return new Promise(resolve => {
@@ -169,11 +193,15 @@
     // ---------------------------------------
     FoldEngine.unfoldImmediate = function () {
         faceGroups.forEach(group => {
-            if (group.userData.initialPos) {
-                group.position.copy(group.userData.initialPos);
+            if (group.userData.initialPosition) {
+                group.position.copy(group.userData.initialPosition);
             }
-            group.setRotationFromEuler(new THREE.Euler(0, 0, 0)); 
-            group.updateMatrix(); 
+            if (group.userData.initialQuaternion) {
+                group.quaternion.copy(group.userData.initialQuaternion);
+            } else {
+                group.setRotationFromEuler(new THREE.Euler(0, 0, 0));
+            }
+            group.updateMatrixWorld(true); 
         });
         scene.updateMatrixWorld(true); 
         renderer.render(scene, camera);
@@ -184,10 +212,10 @@
     // ---------------------------------------
     function getEdges(f) {
         return [
-            { a:[f.u, f.v],          b:[f.u + f.w, f.v]        },  // top
-            { a:[f.u + f.w, f.v],    b:[f.u + f.w, f.v + f.h]  },  // right
-            { a:[f.u + f.w, f.v + f.h], b:[f.u, f.v + f.h]     },  // bottom
-            { a:[f.u, f.v + f.h],    b:[f.u, f.v]              }   // left
+            { a:[f.u, f.v],             b:[f.u + f.w, f.v]        },  // top
+            { a:[f.u + f.w, f.v],       b:[f.u + f.w, f.v + f.h]  },  // right
+            { a:[f.u + f.w, f.v + f.h], b:[f.u, f.v + f.h]        },  // bottom
+            { a:[f.u, f.v + f.h],       b:[f.u, f.v]              }   // left
         ];
     }
 
@@ -201,12 +229,7 @@
         const adj = [...Array(maxId + 1)].map(() => []);
 
         function edgesOf(f) {
-            return [
-                { a:[f.u, f.v],          b:[f.u + f.w, f.v]       }, 
-                { a:[f.u + f.w, f.v],    b:[f.u + f.w, f.v+f.h]   }, 
-                { a:[f.u + f.w, f.v+f.h], b:[f.u, f.v+f.h]        }, 
-                { a:[f.u, f.v+f.h],      b:[f.u, f.v]             } 
-            ];
+            return getEdges(f);
         }
         
         const faces = validFaces; 
@@ -241,9 +264,9 @@
     // BFS folding tree
     // ---------------------------------------
     function buildTree(adj) {
-        const groups = FoldEngine.getFaceGroups();
+        const groups   = FoldEngine.getFaceGroups();
         const validIds = groups.map(g => g.faceId);
-        const maxId = validIds.length > 0 ? Math.max(...validIds) : -1;
+        const maxId    = validIds.length > 0 ? Math.max(...validIds) : -1;
         
         if (maxId < 0 || validIds.length === 0) return { parent: [], order: [] };
 
@@ -273,38 +296,34 @@
     // ---------------------------------------
     // edgeIndex에 따른 실제 3D 회전축 계산
     //  → 부모 face의 로컬 네 꼭짓점을 기준으로 축 계산
+    // cornersLocal: [TL, TR, BR, BL]
+    // edgeA: 0(top),1(right),2(bottom),3(left)
     // ---------------------------------------
     function getAxisAndPoint(parentGroup, relation) {
-        const parentInfo = parentGroup.userData.netInfo;
-        const w = parentInfo.w;
-        const h = parentInfo.h;
+        const cornersLocal = parentGroup.userData.cornersLocal;
+        if (!cornersLocal || cornersLocal.length !== 4) {
+            console.warn("getAxisAndPoint: cornersLocal 누락", parentGroup);
+            return {
+                axis:  new THREE.Vector3(0, 1, 0),
+                point: new THREE.Vector3(0, 0, 0)
+            };
+        }
 
-        const hw = w / 2;
-        const hh = h / 2;
-
-        // 로컬 좌표상의 네 꼭짓점 (시계/반시계 상관 없이 top→right→bottom→left 순서)
-        const cornersLocal = [
-            new THREE.Vector3(-hw,  hh, 0), // 0: top-left
-            new THREE.Vector3( hw,  hh, 0), // 1: top-right
-            new THREE.Vector3( hw, -hh, 0), // 2: bottom-right
-            new THREE.Vector3(-hw, -hh, 0)  // 3: bottom-left
-        ];
-
-        const e = relation.edgeA; // 0: top, 1: right, 2: bottom, 3: left
-
+        const e  = relation.edgeA;
         const i1 = e;
         const i2 = (e + 1) % 4;
 
-        // 로컬 → 월드 변환
-        const p1_world = cornersLocal[i1].clone().applyMatrix4(parentGroup.matrixWorld);
-        const p2_world = cornersLocal[i2].clone().applyMatrix4(parentGroup.matrixWorld);
+        const p1_local = cornersLocal[i1];
+        const p2_local = cornersLocal[i2];
+
+        // 로컬 → 월드
+        const p1_world = p1_local.clone().applyMatrix4(parentGroup.matrixWorld);
+        const p2_world = p2_local.clone().applyMatrix4(parentGroup.matrixWorld);
 
         const axis = new THREE.Vector3().subVectors(p2_world, p1_world).normalize();
 
-        // point는 edge의 한 끝점(월드 좌표)
         return { axis, point: p1_world };
     }
-
 
     // ---------------------------------------
     // foldAnimate
@@ -325,9 +344,9 @@
             let animationFrameId = null;
 
             const animate = (time) => {
-                const elapsed = (time - start) / 1000;
+                const elapsed  = (time - start) / 1000;
                 const progress = Math.min(1, elapsed / duration);
-                const angle = (Math.PI / 2) * progress; 
+                const angle    = (Math.PI / 2) * progress; 
                 
                 // 1. 펼친 상태로 초기화
                 FoldEngine.unfoldImmediate(); 
@@ -344,23 +363,22 @@
                         return; 
                     }
 
-                    const relation = adj[p] && adj[p].find(x => x.to === faceId);
+                    const row = adj[p];
+                    const relation = row && row.find(x => x.to === faceId);
                     if (!relation) {
-                        console.warn("[FoldAnimate WARN] Missing relation", { p, faceId, row: adj[p] });
+                        console.warn("[FoldAnimate WARN] Missing relation", { p, faceId, row });
                         return; 
                     }
 
-                    // 부모 face의 실제 3D edge를 기준으로 회전축/피벗 계산
                     parentGroup.updateMatrixWorld(true);
                     childGroup.updateMatrixWorld(true);
 
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
-                    const worldPoint = point.clone();  // 이미 월드 좌표이므로 centerOffset 보정 불필요
+                    const worldPoint = point.clone();  // 이미 월드 좌표
                     
-                    // 행렬 업데이트
-                    childGroup.updateMatrix(); 
+                    // childGroup 행렬 준비
+                    childGroup.updateMatrixWorld(true);
 
-                    // matrixWorld 검사
                     if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
                         console.warn(`[FoldAnimate WARN] Invalid matrixWorld for face ${faceId}`, childGroup);
                         return;
@@ -373,14 +391,13 @@
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
                     childGroup.position.sub(localPoint);
-                    
-                    // 축을 로컬 좌표로 변환
+
                     const localAxis = axis.clone().applyMatrix4(invMatrix).normalize();
                     
                     childGroup.rotateOnAxis(localAxis, angle);
                     
                     childGroup.position.add(localPoint);
-                    childGroup.updateMatrix(); 
+                    childGroup.updateMatrixWorld(true); 
                 });
 
                 scene.updateMatrixWorld(true);
@@ -398,9 +415,8 @@
         });
     };
 
-
     // ---------------------------------------
-    // getFaceGroups (validator가 사용)
+    // getFaceGroups (validator.js에서 사용)
     // ---------------------------------------
     FoldEngine.getFaceGroups = function () {
         return faceGroups;

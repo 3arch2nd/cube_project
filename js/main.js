@@ -288,8 +288,8 @@
             FoldEngine.unfoldImmediate();
 
             /* ⬇⬇⬇ 접기 → 카메라 회전 → 정답 처리 전체 정상 체인 */
-            FoldEngine.foldAnimate(1.0)
-                .then(() => FoldEngine.showSolvedView(1.5))
+FoldEngine.foldAnimate(1)
+    .then(() => FoldEngine.showSolvedView(1.5));
                 .then(() => {
                     if (correct) {
                         alert("정답입니다! 🎉");

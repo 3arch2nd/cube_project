@@ -227,7 +227,7 @@
                 <canvas id="net-canvas" width="350" height="350"></canvas>
             </div>
             
-            <canvas id="three-view" width="350" height="350"></canvas>
+            <canvas id="three-view" width="350" height="350" tabindex="1" draggable="false"></canvas>
 
             <div class="option-row" style="margin-top:20px;">
                 <button id="btn-check" class="green-btn">정답 확인</button>
@@ -258,27 +258,20 @@
         </div>
     </div>
 
-<!-- 1) THREE 먼저 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r125/three.min.js"></script>
 
 <script src="./js/OrbitControls.js"></script>
     
-<!-- 2) net 데이터 -->
 <script src="./js/cube_nets.js"></script>
 
-<!-- 3) UI -->
 <script src="./js/ui.js"></script>
 
-<!-- 4) Validator -->
 <script src="./js/validator.js"></script>
 
-<!-- 5) Overlap -->
 <script src="./js/overlap.js"></script>
 
-<!-- 6) FoldEngine (UI보다 뒤, main보다 앞) -->
 <script src="./js/foldEngine.js"></script>
 
-<!-- 7) main (가장 마지막) -->
 <script src="./js/main.js"></script>
 
 

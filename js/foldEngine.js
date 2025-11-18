@@ -31,7 +31,7 @@
     let hingeInfo = [];
     let netCenter = { x: 0, y: 0 };
 
-    let nodes = [];  // THREE.Group (각 면)
+    let nodes = []; // THREE.Group (각 면)
 
     const EPS = 1e-6;
 
@@ -86,7 +86,7 @@
         return nodes;
     };
 
-    FoldEngine.scene = scene;  // validator 용
+    FoldEngine.scene = scene; // validator 용
 
     // ------------------------------------------------------------
     // 공통 렌더 루프
@@ -125,7 +125,7 @@
 
         renderer.setSize(canvas.width, canvas.height);
         renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setClearColor(0xffffff, 1);   // ★★★ 3D 배경 흰색
+        renderer.setClearColor(0xffffff, 1); // ★★★ 3D 배경 흰색
 
         scene = new THREE.Scene();
         FoldEngine.scene = scene;
@@ -136,7 +136,7 @@
             0.1,
             200
         );
-        camera.position.set(0, 0, 10);
+        camera.position.set(0, 0, 8); // ✨ 수정 1: 카메라 거리를 10에서 8로 조정
         camera.lookAt(0, 0, 0);
 
         const amb = new THREE.AmbientLight(0xffffff, 0.9);
@@ -201,7 +201,7 @@
 
         // 빗금 오버레이 (기본은 숨김)
         const hatchMesh = new THREE.Mesh(geom, createHatchMaterial());
-        hatchMesh.visible = false;   // ★ 기본 숨김
+        hatchMesh.visible = false; // ★ 기본 숨김
         mesh.userData.hatch = hatchMesh;
 
         // 테두리
@@ -389,9 +389,9 @@
         hingeInfo = Array(N).fill(null);
 
         const corners = [
-            new THREE.Vector3(-0.5,  0.5, 0),
-            new THREE.Vector3( 0.5,  0.5, 0),
-            new THREE.Vector3( 0.5, -0.5, 0),
+            new THREE.Vector3(-0.5, 0.5, 0),
+            new THREE.Vector3(0.5, 0.5, 0),
+            new THREE.Vector3(0.5, -0.5, 0),
             new THREE.Vector3(-0.5, -0.5, 0)
         ];
 
@@ -412,7 +412,7 @@
                 case 3: A = corners[3]; B = corners[0]; break;
             }
 
-            const f  = facesSorted[i];
+            const f = facesSorted[i];
             const pf = facesSorted[p];
 
             const dx = (f.u + f.w / 2) - (pf.u + pf.w / 2);
@@ -551,8 +551,8 @@
         // 5) 평면 상태로 배치
         layoutFlat2D();
 
-        // 6) 카메라/컨트롤 타겟 초기화
-        camera.position.set(0, 0, 10);
+        // 6) 카메라/컨트롤 타겟 초기화 (init에서 설정된 0,0,8 위치를 유지합니다)
+        camera.position.set(0, 0, 8);
         camera.lookAt(0, 0, 0);
         if (controls) {
             controls.target.set(0, 0, 0);
@@ -590,48 +590,20 @@
 
 
     // --------------------------------------------------------------------
-    // PUBLIC: showSolvedView – 카메라 자연 회전 + 끝나면 다시 OrbitControls
+    // PUBLIC: showSolvedView – ✨ 수정 2: 자동 회전 기능 제거, OrbitControls 즉시 활성화
     // --------------------------------------------------------------------
-    FoldEngine.showSolvedView = function (sec = 1.5) {
+    FoldEngine.showSolvedView = function () {
         return new Promise(resolve => {
-            const start = performance.now();
-            isAutoCameraMoving = true;
+            // 자동 카메라 이동 플래그 비활성화
+            isAutoCameraMoving = false; 
 
-            // 자동 회전 동안에는 컨트롤을 잠시 비활성화
-            const oldControlsEnabled = controls ? controls.enabled : true;
-            if (controls) controls.enabled = false;
-
-            function step(t) {
-                const prog = Math.min(1, (t - start) / (sec * 1000));
-
-                const r = 8;
-                const theta = prog * (Math.PI * 0.5); // 0 → 90도 정도 회전
-
-                camera.position.set(
-                    r * Math.sin(theta),
-                    3,
-                    r * Math.cos(theta)
-                );
-                camera.lookAt(0, 0, 0);
-
-                // 렌더는 공통 루프에서 진행
-
-                if (prog < 1) {
-                    requestAnimationFrame(step);
-                } else {
-                    isAutoCameraMoving = false;
-
-                    // 컨트롤 복구 + 타겟 재설정
-                    if (controls) {
-                        controls.enabled = oldControlsEnabled;
-                        controls.target.set(0, 0, 0);
-                        controls.update();
-                    }
-                    resolve();
-                }
+            // OrbitControls 복구 및 타겟 재설정
+            if (controls) {
+                controls.enabled = true; // ✨ 터치/마우스 회전 가능하도록 설정
+                controls.target.set(0, 0, 0);
+                controls.update();
             }
-
-            requestAnimationFrame(step);
+            resolve();
         });
     };
 
@@ -643,4 +615,6 @@
         applyFolding(angleRad);
         // 렌더링은 공통 루프에서 자동 처리
     };
-})(); 
+
+
+})();

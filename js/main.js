@@ -332,33 +332,37 @@
             FoldEngine.unfoldImmediate();
 
             FoldEngine
-                .foldAnimate(1.5)          // 접기 속도 (조금 느리게)
-                .then(() => FoldEngine.showSolvedView()) // ✨ 수정 3: 자동 회전 제거 (FoldEngine.js에서 수정됨)
-                .then(() => {
-    // ⭐ 딜레이 추가: 큐브가 완전히 닫힌 후 50ms (0.05초) 후에 팝업을 띄웁니다.
-    setTimeout(() => {
-        if (correct) {
-            alert("정답입니다! 🎉");
-            btnCheck.classList.add("hidden");
-            document.getElementById("btn-next").classList.remove("hidden");
-        } else {
-                        // 요청: 문구 단순화
-                        alert("다시 생각해 볼까요? 🤔");
+                .foldAnimate(1.5)        // 큐브 접기 (1.5초)
+                .then(() => FoldEngine.showSolvedView()) // OrbitControls 활성화 보장
+                // 👇 이 부분이 Promise 체인의 마지막 then()입니다.
+                .then(() => {
+                    
+                    // ⭐ 수정 포인트: 이 전체 로직을 setTimeout으로 감쌉니다.
+                    setTimeout(() => { // 큐브가 완전히 닫히고 SolveView가 실행된 후 50ms 딜레이 시작
+                        if (correct) {
+                            alert("정답입니다! 🎉");
+                            btnCheck.classList.add("hidden");
+                            document.getElementById("btn-next").classList.remove("hidden");
+                        } else {
+                            // 요청: 문구 단순화
+                            alert("다시 생각해 볼까요? 🤔");
 
-                        btnCheck.disabled = false;
+                            btnCheck.disabled = false;
 
-                        setTimeout(() => {
-                            FoldEngine.unfoldImmediate();
+                            setTimeout(() => {
+                                FoldEngine.unfoldImmediate();
 
-                            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-                                Overlap.startSelection(currentProblem.net);
-                                UI.renderNet(currentProblem.net, {});
-                            } else {
-                                // 같은 문제, 같은 후보 위치 다시 보여주기
-                                UI.renderNet(currentProblem.net, { highlightPositions: true });
-                            }
-                        }, 1500);
-                    }
+                                if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                                    Overlap.startSelection(currentProblem.net);
+                                    UI.renderNet(currentProblem.net, {});
+                                } else {
+                                    // 같은 문제, 같은 후보 위치 다시 보여주기
+                                    UI.renderNet(currentProblem.net, { highlightPositions: true });
+                                }
+                            }, 1500); // 이 1500ms는 오답 후 펼쳐진 상태를 보여주는 딜레이입니다.
+                        }
+                    }, 50); // 👈 여기에 50ms 딜레이를 적용합니다.
+
                 })
                 .catch(err => {
                     console.error("Fold Animation Error:", err);

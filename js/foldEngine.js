@@ -645,6 +645,4 @@
         applyFolding(angleRad);
         // 렌더링은 공통 루프에서 자동 처리
     };
-
-
 })(); 

@@ -111,7 +111,7 @@
             new THREE.Vector3(x0, yTop, 0),
             new THREE.Vector3(x1, yTop, 0),
             new THREE.Vector3(x1, yBottom, 0),
-            new THREE.VectorVector3(x0, yBottom, 0)
+            new THREE.Vector3(x0, yBottom, 0)
         ];
     }
 

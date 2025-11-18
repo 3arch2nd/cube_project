@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – ⭐ 배치 일관성 최종 확보 버전 (절대 좌표 변환 적용) ⭐
+ * foldEngine.js – ⭐ 최종 안정화 버전 (모서리 인덱스 순환 오류 수정) ⭐
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -32,6 +32,7 @@
     let nodes = []; 
 
     const EPS = 1e-6;
+    const Y_OFFSET_STEP = 0.0001; // 깊이 충돌 방지를 위한 미세 Y축 오프셋 (유지)
 
     // ------------------------------------------------------------
     // 색상 (선명) (유지)
@@ -92,7 +93,6 @@
         scene = new BABYLON.Scene(engine);
         scene.clearColor = new BABYLON.Color4(1, 1, 1, 1);
 
-        // 탑 뷰 (Top View) 설정
         camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, 0, 8, BABYLON.Vector3.Zero(), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
 
@@ -129,7 +129,7 @@
         const g = new BABYLON.TransformNode("group" + faceId, scene);
         plane.parent = g;
         
-        plane.rotation.x = Math.PI / 2; // Plane을 XZ 평면에 눕힘
+        plane.rotation.x = Math.PI / 2; 
 
         plane.setPivotPoint(BABYLON.Vector3.Zero());
 
@@ -246,7 +246,7 @@
 
 
     // --------------------------------------------------------------------
-    // 2D 평면 배치 (⭐ 절대 좌표 기반으로 최종 수정)
+    // 2D 평면 배치 (깊이 분리 오프셋 적용)
     // --------------------------------------------------------------------
     function layoutFlat2D() {
         const N = facesSorted.length;
@@ -255,43 +255,41 @@
         const worldPos = [];
         const worldRot = [];
         
-        // ⭐ 개선: 모든 면의 위치를 netCenter 기준으로 절대적으로 계산
         for (let i = 0; i < N; i++) {
             const f = facesSorted[i];
             
-            // 2D 중심 좌표
             const cCx = f.u + f.w / 2;
             const cCy = f.v + f.h / 2;
 
-            // X 좌표: 2D U - Net Center X
             const rootX = cCx - netCenter.x;
-            // Z 좌표: 2D V - Net Center Y에 반전 적용
             const rootZ = -(cCy - netCenter.y);
+            
+            const yOffset = i * Y_OFFSET_STEP;
 
-            worldPos[i] = new BABYLON.Vector3(rootX, 0, rootZ); // Y=0 (XZ 평면)
+            worldPos[i] = new BABYLON.Vector3(rootX, yOffset, rootZ); 
             worldRot[i] = new BABYLON.Quaternion();
 
             nodes[i].position.copyFrom(worldPos[i]);
             nodes[i].rotationQuaternion = worldRot[i];
         }
-
-        // BFS 배치 로직 제거 (이미 절대 위치가 계산되었으므로)
     }
 
 
     // --------------------------------------------------------------------
-    // hinge 정보 구성 (유지)
+    // hinge 정보 구성 (⭐ 모서리 인덱스 순서 수정)
     // --------------------------------------------------------------------
     function buildHingeInfo() {
         const N = facesSorted.length;
         hingeInfo = Array(N).fill(null);
 
         // 3D XZ 로컬 좌표 (Top View에서 2D와 같은 모양이 나오도록 배치)
+        // 2D 데이터의 CCW 순서 (0, 1, 2, 3)에 맞추기 위해 좌표 순서를 조정
         const corners = [
-            new BABYLON.Vector3(-0.5, 0, -0.5), // A: Left Top
-            new BABYLON.Vector3(0.5, 0, -0.5),  // B: Right Top
-            new BABYLON.Vector3(0.5, 0, 0.5),   // C: Right Bottom
-            new BABYLON.Vector3(-0.5, 0, 0.5)   // D: Left Bottom
+            // ⭐ 수정: 2D 데이터의 시계 반대 방향 순서와 일치시키기 위해 Y축(3D Z축)을 반대로 정의
+            new BABYLON.Vector3(-0.5, 0, 0.5),   // A: Left Bottom (2D index 3의 끝점)
+            new BABYLON.Vector3(-0.5, 0, -0.5),  // B: Left Top (2D index 3의 시작점 = index 0의 시작점)
+            new BABYLON.Vector3(0.5, 0, -0.5),   // C: Right Top
+            new BABYLON.Vector3(0.5, 0, 0.5)     // D: Right Bottom
         ];
 
         for (let i = 1; i < N; i++) {
@@ -305,32 +303,37 @@
             let A, B;
 
             switch (edgeId) {
-                case 0: A = corners[0]; B = corners[1]; break; 
-                case 1: A = corners[1]; B = corners[2]; break; 
-                case 2: A = corners[2]; B = corners[3]; break; 
-                case 3: A = corners[3]; B = corners[0]; break; 
+                // 2D 인덱스 0번 모서리: (u, v) -> (u+w, v) (Top)
+                case 0: A = corners[1]; B = corners[2]; break; // B(Left Top) -> C(Right Top)
+                // 2D 인덱스 1번 모서리: (u+w, v) -> (u+w, v+h) (Right)
+                case 1: A = corners[2]; B = corners[3]; break; // C(Right Top) -> D(Right Bottom)
+                // 2D 인덱스 2번 모서리: (u+w, v+h) -> (u, v+h) (Bottom)
+                case 2: A = corners[3]; B = corners[0]; break; // D(Right Bottom) -> A(Left Bottom)
+                // 2D 인덱스 3번 모서리: (u, v+h) -> (u, v) (Left)
+                case 3: A = corners[0]; B = corners[1]; break; // A(Left Bottom) -> B(Left Top)
                 default: continue;
             }
 
             const f = facesSorted[i];
             const pf = facesSorted[p];
 
-            // 2D 평면에서의 자식 중심과 부모 중심 간의 상대 거리
             const dx = (f.u + f.w / 2) - (pf.u + pf.w / 2);
             const dz = -((f.v + f.h / 2) - (pf.v + pf.h / 2)); 
+            
+            const dy = 0; 
 
             hingeInfo[i] = {
                 parent: p,
                 A_local: A.clone(),
                 axis_local: B.subtract(A).normalize(),
-                childCenter_local: new BABYLON.Vector3(dx, 0, dz)
+                childCenter_local: new BABYLON.Vector3(dx, dy, dz)
             };
         }
     }
 
 
     // --------------------------------------------------------------------
-    // 접힘 계산 applyFolding(angle) (⭐ Pw[0] 절대 좌표 기반으로 최종 수정)
+    // 접힘 계산 applyFolding(angle) (Y 오프셋 고려)
     // --------------------------------------------------------------------
     function applyFolding(angle) {
         const N = facesSorted.length;
@@ -339,12 +342,11 @@
         const Qw = []; 
         const Pw = []; 
         
-        // ⭐ 개선: Pw[0]을 layoutFlat2D와 동일한 방식으로 절대적으로 계산
         const rootFace = facesSorted[0];
         const rootX = (rootFace.u + rootFace.w / 2) - netCenter.x;
         const rootZ = -((rootFace.v + rootFace.h / 2) - netCenter.y);
         
-        Pw[0] = new BABYLON.Vector3(rootX, 0, rootZ); 
+        Pw[0] = new BABYLON.Vector3(rootX, 0 * Y_OFFSET_STEP, rootZ); 
         Qw[0] = new BABYLON.Quaternion();
 
         const Q = [0]; 
@@ -387,7 +389,7 @@
         }
 
         for (let i = 0; i < N; i++) {
-            nodes[i].position = Pw[i];
+            nodes[i].position = Pw[i].add(new BABYLON.Vector3(0, i * Y_OFFSET_STEP, 0));
             nodes[i].rotationQuaternion = Qw[i];
         }
     }
@@ -407,7 +409,7 @@
 
 
     // --------------------------------------------------------------------
-    // PUBLIC: loadNet (카메라 타겟 개선)
+    // PUBLIC: loadNet (타겟 계산 재검토)
     // --------------------------------------------------------------------
     FoldEngine.loadNet = function (net) {
         if (!net || !Array.isArray(net.faces)) {
@@ -445,10 +447,10 @@
         camera.alpha = -Math.PI / 2; 
         camera.beta = 0;             
         
-        // 전개도 중심을 타겟으로 설정 (netCenter 기반)
-        const targetX = (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x;
-        const targetZ = -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y);
-        const targetPosition = new BABYLON.Vector3(targetX, 0, targetZ);
+        const rootFace = facesSorted[0];
+        const targetX = (rootFace.u + rootFace.w / 2) - netCenter.x;
+        const targetZ = -((rootFace.v + rootFace.h / 2) - netCenter.y);
+        const targetPosition = new BABYLON.Vector3(targetX, 0, targetZ); 
 
 
         if (controls) {
@@ -502,8 +504,9 @@
             camera.alpha = -Math.PI / 2;
             camera.beta = 0;
 
-            const targetX = (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x;
-            const targetZ = -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y);
+            const rootFace = facesSorted[0];
+            const targetX = (rootFace.u + rootFace.w / 2) - netCenter.x;
+            const targetZ = -((rootFace.v + rootFace.h / 2) - netCenter.y);
             const targetPosition = new BABYLON.Vector3(targetX, 0, targetZ);
 
             if (controls) {

@@ -103,6 +103,9 @@
             height:350px;
             background:#000;
             margin:20px auto;
+            /* ⭐ 최종 수정: 렌더링 충돌을 막기 위해 GPU 격리 속성 추가 */
+            transform: translateZ(0); 
+            will-change: transform;
         }
 
         /* QR 팝업 */

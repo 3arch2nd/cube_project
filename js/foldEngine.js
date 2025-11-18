@@ -20,7 +20,7 @@
     // OrbitControls
     let controls = null;
     let animationStarted = false;
-    // let isAutoCameraMoving = false; // ❌ 삭제: 이 플래그가 컨트롤 업데이트를 막았습니다.
+    // let isAutoCameraMoving = false; // ❌ 삭제
 
     // ------------------------------------------------------------
     // 전개도 데이터
@@ -99,7 +99,6 @@
             requestAnimationFrame(loop);
 
             // ✨ 수정: controls가 유효하면 무조건 update를 호출합니다.
-            // isAutoCameraMoving 플래그 조건을 제거했습니다.
             if (controls) {
                 controls.update(); 
             }
@@ -158,8 +157,17 @@
             controls.enablePan = false;
             controls.target.set(0, 0, 0);
             controls.update();
+
+            // ⭐ 최종 보강: 캔버스가 상호작용을 잡도록 강제합니다. (tabIndex, 포커스)
+            renderer.domElement.tabIndex = 1; 
+            renderer.domElement.style.outline = 'none'; 
+            renderer.domElement.addEventListener('pointerdown', () => {
+                renderer.domElement.focus();
+            });
+
         } else {
             controls = null;
+            console.error("[FoldEngine] OrbitControls 로드 또는 초기화 실패.");
         }
 
         startBaseLoop();
@@ -596,8 +604,6 @@
     // --------------------------------------------------------------------
     FoldEngine.showSolvedView = function () {
         return new Promise(resolve => {
-            // isAutoCameraMoving 플래그를 변수 자체에서 제거했으므로, 여기서는 아무것도 할 필요가 없습니다.
-
             // OrbitControls 복구 및 타겟 재설정
             if (controls) {
                 controls.enabled = true; // 터치/마우스 회전 가능하도록 설정

@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – Babylon.js 최종 포팅 버전 (정면 시점 및 API 오류 해결)
+ * foldEngine.js – ⭐ BABYLON.js 최종 안정화 및 포팅 완료 버전 ⭐
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -11,7 +11,7 @@
     window.FoldEngine = FoldEngine;
 
     // ------------------------------------------------------------
-    // BABYLON 기본 객체 (THREE 대체)
+    // BABYLON 기본 객체
     // ------------------------------------------------------------
     let scene = null;
     let camera = null;
@@ -29,7 +29,7 @@
     let hingeInfo = [];
     let netCenter = { x: 0, y: 0 };
 
-    let nodes = []; // BABYLON.TransformNode (THREE.Group 대체)
+    let nodes = []; 
 
     const EPS = 1e-6;
 
@@ -40,12 +40,13 @@
         0xff4d4d, 0xffd43b, 0x51cf66, 0x339af0, 0x845ef7, 0xf06595
     ];
     
-    // ⭐ Babylon.js 재질 생성 함수
+    // Babylon.js 재질 생성 함수
     function createFaceMaterial(scene, colorHex) {
         const mat = new BABYLON.StandardMaterial("faceMat" + colorHex, scene);
         mat.diffuseColor = BABYLON.Color3.FromHexString("#" + colorHex.toString(16).padStart(6, '0'));
         mat.alpha = 0.78; 
         mat.backFaceCulling = false; // 양면 렌더링
+        mat.disableLighting = false; // 조명 영향 받도록 설정
         return mat;
     }
 
@@ -93,7 +94,7 @@
         scene = new BABYLON.Scene(engine);
         scene.clearColor = new BABYLON.Color4(1, 1, 1, 1); // 3D 배경 흰색
 
-        // ⭐ 수정: 카메라 초기 시점 변경 (정면 뷰)
+        // ⭐ ArcRotateCamera 사용 (OrbitControls 대체)
         camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2, 8, BABYLON.Vector3.Zero(), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
         
@@ -104,7 +105,9 @@
         camera.angularSensibilityY = 3000;
         camera.minZ = 0.1; 
 
-        new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(1, 1, 0), scene);
+        // 조명: HemisphericLight와 DirectionalLight 역할을 수행하도록 HemisphericLight를 추가
+        new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
+        new BABYLON.HemisphericLight("light2", new BABYLON.Vector3(0, -1, 0), scene);
         
         controls = camera; 
 
@@ -119,15 +122,21 @@
     }
 
     // --------------------------------------------------------------------
-    // 3D 단위 면 생성 (Babylon.js 대체)
+    // 3D 단위 면 생성 (Babylon.js 대체 및 방향 수정)
     // --------------------------------------------------------------------
     function createUnitFace(faceId) {
+        // ⭐ BABYLON.MeshBuilder.CreatePlane을 사용하여 면 생성
         const plane = BABYLON.MeshBuilder.CreatePlane("face" + faceId, { width: 1, height: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
         
+        // ⭐ 재질 생성 및 할당
         plane.material = createFaceMaterial(scene, getFaceColorById(faceId));
         
+        // ⭐ BABYLON.TransformNode (THREE.Group 대체)
         const g = new BABYLON.TransformNode("group" + faceId, scene);
         plane.parent = g; 
+        
+        // ⭐ 수정: Plane이 XY평면에 놓였을 때 Z축을 바라보도록 초기 회전 (이전 THREE.js 환경과 유사하게)
+        plane.rotation.x = Math.PI / 2;
         
         plane.setPivotPoint(BABYLON.Vector3.Zero());
 
@@ -237,7 +246,7 @@
 
 
     // --------------------------------------------------------------------
-    // 2D 평면 배치 (수학 객체 변환)
+    // 2D 평면 배치 (수학 객체 변환 및 Y축 반전 수정)
     // --------------------------------------------------------------------
     function layoutFlat2D() {
         const N = facesSorted.length;
@@ -245,7 +254,8 @@
 
         const rootFace = facesSorted[0];
         const rootX = (rootFace.u + rootFace.w / 2) - netCenter.x;
-        const rootY = -((rootFace.v + rootFace.h / 2) - netCenter.y);
+        // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
+        const rootY = ((rootFace.v + rootFace.h / 2) - netCenter.y); 
 
         const worldPos = [];
         const worldRot = [];
@@ -274,7 +284,8 @@
                     const cCy = f.v + f.h / 2;
 
                     const dx = cCx - pCx;
-                    const dy = -(cCy - pCy);
+                    // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
+                    const dy = (cCy - pCy); 
 
                     worldPos[i] = new BABYLON.Vector3( 
                         worldPos[p].x + dx,
@@ -329,7 +340,8 @@
             const pf = facesSorted[p];
 
             const dx = (f.u + f.w / 2) - (pf.u + pf.w / 2);
-            const dy = -((f.v + f.h / 2) - (pf.v + pf.h / 2));
+            // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
+            const dy = (f.v + f.h / 2) - (pf.v + pf.h / 2); 
 
             hingeInfo[i] = {
                 parent: p,
@@ -342,7 +354,7 @@
 
 
     // --------------------------------------------------------------------
-    // 접힘 계산 applyFolding(angle) - 수학 객체 포팅
+    // 접힘 계산 applyFolding(angle) - 수학 객체 포팅 (유지)
     // --------------------------------------------------------------------
     function applyFolding(angle) {
         const N = facesSorted.length;
@@ -353,7 +365,8 @@
 
         Pw[0] = new BABYLON.Vector3( 
             (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x,
-            -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
+            // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
+            ((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
             0
         );
         Qw[0] = new BABYLON.Quaternion(); 
@@ -377,11 +390,15 @@
                     );
                     
                     let r0 = info.childCenter_local.clone().subtract(info.A_local);
-                    r0 = r0.rotateByQuaternionToRef(qLocal, r0); 
+                    // ⭐ 수정: Vector3의 회전은 matrix를 통해 적용
+                    r0 = BABYLON.Vector3.TransformCoordinates(r0, BABYLON.Matrix.FromQuaternion(qLocal)); 
 
                     const cLocal = info.A_local.clone().add(r0);
                     
-                    const cWorld = cLocal.clone().rotateByQuaternionToRef(parentQ, new BABYLON.Vector3()).add(parentP);
+                    // ⭐ 수정: cWorld 계산도 matrix를 통해 적용
+                    const cWorld = BABYLON.Vector3.TransformCoordinates(cLocal, BABYLON.Matrix.Compose(
+                        BABYLON.Vector3.One(), parentQ, BABYLON.Vector3.Zero()
+                    )).add(parentP);
 
                     Pw[i] = cWorld;
                     Qw[i] = parentQ.multiply(qLocal); 
@@ -471,7 +488,7 @@
     FoldEngine.foldAnimate = function (sec = 2.0) {
         return new Promise(resolve => {
             
-            // ⭐ 수정: engine.getCanvas() -> engine.getRenderingCanvas()로 변경
+            // ⭐ API 오류 해결: engine.getRenderingCanvas()로 변경
             if (controls) {
                 controls.detachControl(engine.getRenderingCanvas(), true); 
             }
@@ -508,7 +525,7 @@
             camera.beta = Math.PI / 2;
             
             if (controls) {
-                // ⭐ 수정: engine.getCanvas() -> engine.getRenderingCanvas()로 변경
+                // ⭐ API 오류 해결: engine.getRenderingCanvas()로 변경
                 controls.attachControl(engine.getRenderingCanvas(), true);
                 controls.target = BABYLON.Vector3.Zero(); 
             }

@@ -576,7 +576,7 @@
     // --------------------------------------------------------------------
     // PUBLIC: foldAnimate – 학생용 접기 애니메이션
     // --------------------------------------------------------------------
-    FoldEngine.foldAnimate = function (sec = 1.5) {
+    FoldEngine.foldAnimate = function (sec = 2.0) {
         return new Promise(resolve => {
             const start = performance.now();
 

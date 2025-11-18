@@ -332,9 +332,9 @@
             FoldEngine.unfoldImmediate();
 
             FoldEngine
-                .foldAnimate(1.5)        // 접기 속도 (조금 느리게)
-                .then(() => FoldEngine.showSolvedView(1.5)) // 회전
-                .then(() => {
+                .foldAnimate(1.5)          // 접기 속도 (조금 느리게)
+                .then(() => FoldEngine.showSolvedView()) // ✨ 수정 3: 자동 회전 제거 (FoldEngine.js에서 수정됨)
+                .then(() => {
                     if (correct) {
                         alert("정답입니다! 🎉");
                         btnCheck.classList.add("hidden");

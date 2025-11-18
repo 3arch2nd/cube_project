@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – 최신 안정 버전 + 반투명 + OrbitControls + 빗금(///)
+ * foldEngine.js – 최종 안정화 버전 (Controls.reset() 제거 및 강제 잠금 적용)
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -115,6 +115,12 @@
             console.warn("[FoldEngine.init] canvas is null");
             return;
         }
+        
+        // ⭐ Controls가 있다면 해제하고 재설정 (안정성 강화)
+        if (controls) {
+            controls.dispose(); 
+            controls = null;
+        }
 
         if (!renderer) {
             renderer = new THREE.WebGLRenderer({
@@ -122,10 +128,11 @@
                 antialias: true
             });
         }
+        // (주의: 렌더러 파괴/재생성은 복잡한 DOM 조작을 수반하므로, Controls 재설정으로 대체합니다.)
 
         renderer.setSize(canvas.width, canvas.height);
         renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setClearColor(0xffffff, 1); // ★★★ 3D 배경 흰색
+        renderer.setClearColor(0xffffff, 1); // 3D 배경 흰색
 
         scene = new THREE.Scene();
         FoldEngine.scene = scene;
@@ -136,7 +143,7 @@
             0.1,
             200
         );
-        camera.position.set(0, 0, 8); // 카메라 거리를 10에서 8로 조정
+        camera.position.set(0, 0, 8); 
         camera.lookAt(0, 0, 0);
 
         const amb = new THREE.AmbientLight(0xffffff, 0.9);
@@ -157,7 +164,7 @@
             controls.target.set(0, 0, 0);
             controls.update();
 
-            // 캔버스가 상호작용을 잡도록 강제합니다. (tabIndex, 포커스)
+            // 캔버스가 상호작용을 잡도록 강제
             renderer.domElement.tabIndex = 1; 
             renderer.domElement.style.outline = 'none'; 
             renderer.domElement.addEventListener('pointerdown', () => {
@@ -210,7 +217,7 @@
 
         // 빗금 오버레이 (기본은 숨김)
         const hatchMesh = new THREE.Mesh(geom, createHatchMaterial());
-        hatchMesh.visible = false; // ★ 기본 숨김
+        hatchMesh.visible = false; // 기본 숨김
         mesh.userData.hatch = hatchMesh;
 
         // 테두리
@@ -561,12 +568,13 @@
         layoutFlat2D();
 
         // 6) 카메라/컨트롤 타겟 초기화 (문제 로딩 시 항상 초기 상태로 돌아감)
-        camera.position.set(0, 0, 8); // 카메라 위치를 0, 0, 8로 재설정
+        camera.position.set(0, 0, 8); // ⭐ 카메라 위치 강제 설정
         camera.lookAt(0, 0, 0);
         
         if (controls) {
-            controls.reset(); // OrbitControls의 내부 회전 상태를 완전히 초기화
-            controls.target.set(0, 0, 0);
+            // controls.reset() 제거 (최종 안정화)
+            controls.target.set(0, 0, 0); // ⭐ 타겟 강제 설정
+            controls.enabled = true; // 다음 문제를 위해 controls를 활성화 상태로 유지
             controls.update();
         }
 
@@ -575,10 +583,16 @@
 
 
     // --------------------------------------------------------------------
-    // PUBLIC: foldAnimate – 학생용 접기 애니메이션
+    // PUBLIC: foldAnimate – 학생용 접기 애니메이션 (Controls 잠금 추가)
     // --------------------------------------------------------------------
     FoldEngine.foldAnimate = function (sec = 2.0) {
         return new Promise(resolve => {
+            
+            // ⭐ 핵심: 애니메이션 시작 시 Controls 비활성화 (조작 충돌 방지)
+            if (controls) {
+                controls.enabled = false;
+            }
+
             const start = performance.now();
 
             function step(t) {
@@ -601,43 +615,25 @@
 
 
 // --------------------------------------------------------------------
-    // PUBLIC: showSolvedView – 자동 회전 기능 제거, OrbitControls 즉시 활성화 보장
+    // PUBLIC: showSolvedView – 즉시 복귀 및 Controls 해제
     // --------------------------------------------------------------------
-    FoldEngine.showSolvedView = function (sec = 1.0) { // 1.0초 동안 카메라 이동
+    FoldEngine.showSolvedView = function (sec = 0.0) { 
         return new Promise(resolve => {
             
-            // ⭐ 핵심 수정 1: 카메라 이동 보간 로직을 재도입하여 부드러운 중앙 이동 보장
-            const startPosition = camera.position.clone();
-            const endPosition = new THREE.Vector3(0, 0, 8); // 최종 위치: 정면, 거리 8
-            const start = performance.now();
-
-            // ⭐ 큐브가 사라지는 것을 방지하기 위해 Controls를 임시 비활성화 (이동 중 조작 방지)
+            // ⭐ 핵심: 즉시 카메라 위치를 복귀하고 Controls 상태를 재활성화
+            camera.position.set(0, 0, 8); 
+            camera.lookAt(0, 0, 0); 
+            
             if (controls) {
-                controls.enabled = false;
+                // controls.reset() 대신 직접 설정
+                controls.target.set(0, 0, 0); 
+                controls.enabled = true; // Controls 활성화
+                controls.update(); 
+                controls.update(); // 더블 업데이트로 확실히 상태 반영
             }
             
-            function step(t) {
-                const prog = Math.min(1, (t - start) / (sec * 1000));
-                
-                // A 지점에서 B 지점으로 부드럽게 이동
-                camera.position.lerpVectors(startPosition, endPosition, prog);
-                camera.lookAt(0, 0, 0); // 항상 큐브 중앙을 바라보게 함
-                
-                if (prog < 1) {
-                    requestAnimationFrame(step);
-                } else {
-                    // Controls 활성화 및 타겟 고정
-                    if (controls) {
-                        controls.enabled = true; // 터치/마우스 회전 가능
-                        controls.target.set(0, 0, 0);
-                        controls.update();
-                        controls.update(); // 더블 업데이트로 확실히 상태 반영
-                    }
-                    resolve();
-                }
-            }
+            resolve(); // 즉시 완료
 
-            requestAnimationFrame(step);
         });
     };
 

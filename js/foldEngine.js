@@ -589,20 +589,21 @@
     };
 
 
-    // --------------------------------------------------------------------
-    // PUBLIC: showSolvedView – ✨ 수정 2: 자동 회전 기능 제거, OrbitControls 즉시 활성화
+// --------------------------------------------------------------------
+    // PUBLIC: showSolvedView – 자동 회전 기능 제거, OrbitControls 즉시 활성화 보장
     // --------------------------------------------------------------------
     FoldEngine.showSolvedView = function () {
         return new Promise(resolve => {
-            // 자동 카메라 이동 플래그 비활성화
+            // ✨ 수정 1: 자동 카메라 이동 플래그를 무조건 false로 설정합니다.
             isAutoCameraMoving = false; 
 
             // OrbitControls 복구 및 타겟 재설정
             if (controls) {
-                controls.enabled = true; // ✨ 터치/마우스 회전 가능하도록 설정
+                controls.enabled = true; // 터치/마우스 회전 가능하도록 설정
                 controls.target.set(0, 0, 0);
                 controls.update();
             }
+            // ★ 접힌 후 중앙에 고정하고 OrbitControls를 즉시 사용자에게 넘깁니다.
             resolve();
         });
     };

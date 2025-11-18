@@ -54,7 +54,7 @@
         const g = new THREE.Geometry();
         g.vertices.push(
             new THREE.Vector3(-0.5, -0.5, 0),
-            new THREE.VectorVector3(0.5, -0.5, 0),
+            new THREE.Vector3(0.5, -0.5, 0),
             new THREE.Vector3(0.5, 0.5, 0),
             new THREE.Vector3(-0.5, 0.5, 0)
         );

@@ -70,8 +70,11 @@
             window.CubeProject.currentProblem &&
             window.CubeProject.currentProblem.mode === window.CubeProject.MAIN_MODE.NET_BUILD;
 
+        // 전개도 완성 모드일 때만 제거 면/후보 위치 계산
         if (isNetBuildMode) {
-            if (removedFaceId == null) removedFaceId = pickRemovableFace(net);
+            if (removedFaceId == null) {
+                removedFaceId = pickRemovableFace(currentNet);
+            }
             computeCandidatePositions(currentNet);
         }
 
@@ -82,9 +85,9 @@
         // 겹침 문제: 선택된 점/선 하이라이트
         if (!isNetBuildMode) {
             if (window.Overlap && window.Overlap.getSelections) {
-                const { first, second } = window.Overlap.getSelections();
-                if (first) drawOverlapElement(first, "#ffd966");
-                if (second) drawOverlapElement(second, "#ffc107");
+                const sel = window.Overlap.getSelections();
+                if (sel.first) drawOverlapElement(sel.first, "#ffd966");
+                if (sel.second) drawOverlapElement(sel.second, "#ffc107");
             }
         }
 
@@ -118,8 +121,8 @@
     // ------------------------------------------------
     // 중심 정렬 계산
     //   - removedFace 제외
-    //   - 후보 candidatePositions 는 포함 (항상 보이도록)
-    //   - placed 는 포함하지 않음 → 클릭해도 전개도가 안 흔들리게
+    //   - candidatePositions 포함 (항상 보이도록)
+    //   - placed 는 포함하지 않음 → 클릭해도 전개도 안 흔들림
     // ------------------------------------------------
     function calculateCenterOffset(net, removedId, isNetBuildMode) {
         if (!net || !net.faces.length) return;
@@ -148,7 +151,7 @@
         const netWidth = maxU - minU;
         const netHeight = maxV - minV;
 
-        const canvasSize = canvas.width;
+        const canvasSize = canvas.width; // 정사각형 캔버스 가정
 
         U_OFFSET = (canvasSize / UNIT - netWidth) / 2 - minU;
         V_OFFSET = (canvasSize / UNIT - netHeight) / 2 - minV;
@@ -300,9 +303,11 @@
     // ------------------------------------------------
     function pickRemovableFace(net) {
         const adj = buildAdjacency(net);
+        // 연결 차수가 1인 face를 우선 제거 대상으로 선택
         for (let i = 0; i < 6; i++) {
-            if (adj[i].length === 1) return i;
+            if (adj[i] && adj[i].length === 1) return i;
         }
+        // 없으면 0번 face
         return 0;
     }
 
@@ -312,14 +317,16 @@
     };
 
     // ------------------------------------------------
-    // adjacency 계산
+    // adjacency 계산 (id 기준)
     // ------------------------------------------------
     function buildAdjacency(net) {
         const adj = [...Array(6)].map(() => []);
-        for (let i = 0; i < net.faces.length; i++) {
-            for (let j = i + 1; j < net.faces.length; j++) {
-                const fi = net.faces[i];
-                const fj = net.faces[j];
+        const faces = net.faces;
+
+        for (let i = 0; i < faces.length; i++) {
+            for (let j = i + 1; j < faces.length; j++) {
+                const fi = faces[i];
+                const fj = faces[j];
 
                 const ei = getEdges(fi);
                 const ej = getEdges(fj);
@@ -403,11 +410,24 @@
     function computePlacementByAttachment(parent, removed, eP) {
         let ru, rv;
         switch (eP) {
-            case 0: ru = parent.u;             rv = parent.v - removed.h; break; // 위
-            case 1: ru = parent.u + parent.w;  rv = parent.v;             break; // 오른쪽
-            case 2: ru = parent.u;             rv = parent.v + parent.h;  break; // 아래
-            case 3: ru = parent.u - removed.w; rv = parent.v;             break; // 왼쪽
-            default: return null;
+            case 0: // 위
+                ru = parent.u;
+                rv = parent.v - removed.h;
+                break;
+            case 1: // 오른쪽
+                ru = parent.u + parent.w;
+                rv = parent.v;
+                break;
+            case 2: // 아래
+                ru = parent.u;
+                rv = parent.v + parent.h;
+                break;
+            case 3: // 왼쪽
+                ru = parent.u - removed.w;
+                rv = parent.v;
+                break;
+            default:
+                return null;
         }
         return { u: ru, v: rv, w: removed.w, h: removed.h };
     }
@@ -458,251 +478,36 @@
         }
         // 겹침 찾기
         else if (mode === window.CubeProject.MAIN_MODE.OVERLAP_FIND) {
-            const result = window.Overlap.recordClick(u, v);
-            if (result) {
-                UI.renderNet(currentNet, {});
-                return;
+            if (window.Overlap && typeof window.Overlap.recordClick === "function") {
+                const result = window.Overlap.recordClick(u, v);
+                if (result) {
+                    UI.renderNet(currentNet, {});
+                }
             }
         }
     }
 
     // ------------------------------------------------
-    // 정답 판정 – Validator 연결
+    // 정답 판정 – Validator / Overlap 연결
     // ------------------------------------------------
     UI.checkPieceResult = function (net) {
         if (!net || !net.faces || net.faces.length !== 6) {
-            Validator.lastError = "검증을 위한 6조각 전개도가 준비되지 않았습니다.";
+            if (window.Validator) {
+                window.Validator.lastError = "검증을 위한 6조각 전개도가 준비되지 않았습니다.";
+            }
             return false;
         }
-        return Validator.validateNet(net);
+        if (!window.Validator || typeof window.Validator.validateNet !== "function") {
+            return false;
+        }
+        return window.Validator.validateNet(net);
     };
 
     UI.checkOverlapResult = function (net) {
-        return window.Overlap.checkUserAnswer(net);
-    };
-
-})();
-
-    // ------------------------------------------------
-    // removable face (잎) 선택 – leaf id
-    // ------------------------------------------------
-    function pickRemovableFace(net) {
-        const adj = buildAdjacency(net);
-        for (let i = 0; i < 6; i++) {
-            if (adj[i].length === 1) return i;
-        }
-        return 0;
-    }
-
-    // ------------------------------------------------
-    // adjacency 계산
-    // ------------------------------------------------
-    function buildAdjacency(net) {
-        const adj = [...Array(6)].map(() => []);
-
-        for (let i = 0; i < net.faces.length; i++) {
-            for (let j = i + 1; j < net.faces.length; j++) {
-
-                const fi = net.faces[i];
-                const fj = net.faces[j];
-
-                const ei = getEdges(fi);
-                const ej = getEdges(fj);
-
-                for (let a = 0; a < 4; a++) {
-                    for (let b = 0; b < 4; b++) {
-                        if (sameEdge(ei[a], ej[b])) {
-                            adj[fi.id].push({ to: fj.id, eA: a, eB: b });
-                            adj[fj.id].push({ to: fi.id, eA: b, eB: a });
-                        }
-                    }
-                }
-            }
-        }
-        return adj;
-    }
-
-    function getEdges(f) {
-        return [
-            { a: [f.u, f.v], b: [f.u + f.w, f.v] },
-            { a: [f.u + f.w, f.v], b: [f.u + f.w, f.v + f.h] },
-            { a: [f.u + f.w, f.v + f.h], b: [f.u, f.v + f.h] },
-            { a: [f.u, f.v + f.h], b: [f.u, f.v] }
-        ];
-    }
-
-    function sameEdge(e1, e2) {
-        return (
-            Math.abs(e1.a[0] - e2.b[0]) < EPS &&
-            Math.abs(e1.a[1] - e2.b[1]) < EPS &&
-            Math.abs(e1.b[0] - e2.a[0]) < EPS &&
-            Math.abs(e1.b[1] - e2.a[1]) < EPS
-        );
-    }
-
-    function edgeLength(edge) {
-        const dx = edge.b[0] - edge.a[0];
-        const dy = edge.b[1] - edge.a[1];
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    // ------------------------------------------------
-    // 후보 위치 계산
-    // ------------------------------------------------
-    function computeCandidatePositions(net) {
-        candidatePositions = [];
-
-        const removedFace = net.faces.find(f => f.id === removedFaceId);
-        if (!removedFace) return;
-
-        const activeFaces = net.faces.filter(f => f.id !== removedFaceId);
-
-        for (const parent of activeFaces) {
-            const edgesF = getEdges(parent);
-            const edgesR = getEdges(removedFace);
-
-            for (let eP = 0; eP < 4; eP++) {
-                for (let eR = 0; eR < 4; eR++) {
-                    if (Math.abs(edgeLength(edgesF[eP]) - edgeLength(edgesR[eR])) > EPS)
-                        continue;
-
-                    const pos = computePlacementByAttachment(parent, removedFace, eP);
-                    if (!pos) continue;
-
-                    const exist = candidatePositions.some(cp =>
-                        Math.abs(cp.u - pos.u) < EPS &&
-                        Math.abs(cp.v - pos.v) < EPS
-                    );
-                    if (!exist) candidatePositions.push(pos);
-                }
-            }
-        }
-    }
-
-    function computePlacementByAttachment(parent, removed, edgeIndex) {
-        let ru, rv;
-
-        switch (edgeIndex) {
-            case 0: ru = parent.u;               rv = parent.v - removed.h; break; // top
-            case 1: ru = parent.u + parent.w;    rv = parent.v;             break; // right
-            case 2: ru = parent.u;               rv = parent.v + parent.h;  break; // bottom
-            case 3: ru = parent.u - removed.w;   rv = parent.v;             break; // left
-            default: return null;
-        }
-        return { u: ru, v: rv, w: removed.w, h: removed.h };
-    }
-
-    function isPositionOccupied(pos) {
-        return currentNet.faces.some(f =>
-            f.id !== removedFaceId &&
-            Math.abs(f.u - pos.u) < EPS &&
-            Math.abs(f.v - pos.v) < EPS
-        );
-    }
-
-    // ------------------------------------------------
-    // 클릭 처리
-    // ------------------------------------------------
-    function onCanvasClick(evt) {
-        if (!canvas || !currentNet || !window.CubeProject?.currentProblem)
-            return;
-
-        const rect = canvas.getBoundingClientRect();
-        const x = evt.clientX - rect.left;
-        const y = evt.clientY - rect.top;
-
-        const u = x / UNIT - U_OFFSET;
-        const v = y / UNIT - V_OFFSET;
-
-        // 전개도 완성 모드
-        if (window.CubeProject.currentProblem.mode === window.CubeProject.MAIN_MODE.NET_BUILD) {
-            for (const pos of candidatePositions) {
-                if (
-                    u >= pos.u && u < pos.u + pos.w &&
-                    v >= pos.v && v < pos.v + pos.h &&
-                    !isPositionOccupied(pos)
-                ) {
-                    UI.placed = pos;
-                    UI.renderNet(currentNet, { highlightPositions: true });
-                    return;
-                }
-            }
-        }
-
-        // 겹침 찾기 모드
-        else {
-            const success = window.Overlap.recordClick(u, v);
-            if (success) UI.renderNet(currentNet);
-        }
-    }
-
-    // ------------------------------------------------
-    // 메인에서 호출하는 정답 판정
-    // ------------------------------------------------
-    UI.checkPieceResult = function (net) {
-        if (!net || net.faces.length !== 6) {
-            Validator.lastError = "면 개수가 6개가 아닙니다.";
+        if (!window.Overlap || typeof window.Overlap.checkUserAnswer !== "function") {
             return false;
         }
-        return Validator.validateNet(net);
-    };
-
-    UI.checkOverlapResult = function (net) {
         return window.Overlap.checkUserAnswer(net);
     };
-
-})();
-
-// ------------------------------------------------
-// 겹침 문제용 – 선택 하이라이트
-// ------------------------------------------------
-function drawOverlapElement(elem, color) {
-    if (!elem || !currentNet) return;
-
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 5;
-
-    const face = currentNet.faces.find(f => f.id === elem.face);
-    if (!face) return;
-
-    if (elem.type === "vertex") {
-        const x = (elem.x + U_OFFSET) * UNIT;
-        const y = (elem.y + V_OFFSET) * UNIT;
-        ctx.beginPath();
-        ctx.arc(x, y, 7, 0, Math.PI * 2);
-        ctx.fill();
-    } else if (elem.type === "edge") {
-        const edges = getEdges(face);
-        const e = edges[elem.edge];
-
-        const x1 = (e.a[0] + U_OFFSET) * UNIT;
-        const y1 = (e.a[1] + V_OFFSET) * UNIT;
-        const x2 = (e.b[0] + U_OFFSET) * UNIT;
-        const y2 = (e.b[1] + V_OFFSET) * UNIT;
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.lineCap = "round";
-        ctx.stroke();
-    }
-
-    ctx.restore();
-}
-
-
-// ------------------------------------------------
-// UI에서 main.js가 쓰는 getter
-// ------------------------------------------------
-UI.getRemovedFaceId = function () {
-    return removedFaceId;
-};
-
-
-// ------------------------------------------------
-// UI 모듈 끝
-// ------------------------------------------------
 
 })();

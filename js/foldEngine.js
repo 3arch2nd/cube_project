@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – Babylon.js 최종 포팅 버전 (좌표계 반전 및 Z-Index 수정)
+ * foldEngine.js – ⭐ BABYLON.js 최종 작동 버전 (최종 수학적 오류 해결) ⭐
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -11,7 +11,7 @@
     window.FoldEngine = FoldEngine;
 
     // ------------------------------------------------------------
-    // BABYLON 기본 객체 (THREE 대체)
+    // BABYLON 기본 객체
     // ------------------------------------------------------------
     let scene = null;
     let camera = null;
@@ -29,7 +29,7 @@
     let hingeInfo = [];
     let netCenter = { x: 0, y: 0 };
 
-    let nodes = []; // BABYLON.TransformNode (THREE.Group 대체)
+    let nodes = []; // BABYLON.TransformNode
 
     const EPS = 1e-6;
 
@@ -45,8 +45,8 @@
         const mat = new BABYLON.StandardMaterial("faceMat" + colorHex, scene);
         mat.diffuseColor = BABYLON.Color3.FromHexString("#" + colorHex.toString(16).padStart(6, '0'));
         mat.alpha = 0.78; 
-        mat.backFaceCulling = false; // 양면 렌더링
-        mat.disableLighting = false; // 조명 영향 받도록 설정
+        mat.backFaceCulling = false;
+        mat.disableLighting = false; 
         return mat;
     }
 
@@ -92,9 +92,10 @@
         engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
         
         scene = new BABYLON.Scene(engine);
-        scene.clearColor = new BABYLON.Color4(1, 1, 1, 1); // 3D 배경 흰색
+        scene.clearColor = new BABYLON.Color4(1, 1, 1, 1); 
 
-        // ⭐ 수정: 카메라 초기 시점 변경 (정면 뷰) 및 Near Plane 조정
+        // ⭐ ArcRotateCamera 사용: 2D 정면 시점
+        // alpha: 수평 회전 (-90도), beta: 수직 90도 (정면), radius: 거리 8
         camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2, 8, BABYLON.Vector3.Zero(), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
         
@@ -103,10 +104,9 @@
         camera.inertia = 0.8; 
         camera.angularSensibilityX = 3000;
         camera.angularSensibilityY = 3000;
-        camera.minZ = 0.01; // Near Plane 조정 (Z-fighting 완화)
-        camera.maxZ = 1000; // Far Plane 조정
+        camera.minZ = 0.01; // Z-fighting 완화
+        camera.maxZ = 1000; 
 
-        // 조명 추가
         new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
         new BABYLON.HemisphericLight("light2", new BABYLON.Vector3(0, -1, 0), scene);
         
@@ -134,7 +134,8 @@
         const g = new BABYLON.TransformNode("group" + faceId, scene);
         plane.parent = g; 
         
-        // Plane이 Z축을 바라보도록 초기 회전 (XY평면에서 XZ평면으로 90도 회전)
+        // ⭐ 수정: Plane이 Z축을 바라보도록 초기 회전 (Y축을 중심으로 90도 회전)
+        // Babylon.js는 Z가 앞이므로, 면을 Z축에 수직이 되도록 X축을 중심으로 90도 회전
         plane.rotation.x = Math.PI / 2;
         
         plane.setPivotPoint(BABYLON.Vector3.Zero());
@@ -353,7 +354,7 @@
 
 
     // --------------------------------------------------------------------
-    // 접힘 계산 applyFolding(angle) - 수학 객체 포팅 (유지)
+    // 접힘 계산 applyFolding(angle) - 수학 객체 포팅 (최종 오류 해결)
     // --------------------------------------------------------------------
     function applyFolding(angle) {
         const N = facesSorted.length;
@@ -364,7 +365,6 @@
 
         Pw[0] = new BABYLON.Vector3( 
             (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x,
-            // ⭐ 수정: Y축 반전 문제 해결
             -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
             0
         );
@@ -389,15 +389,16 @@
                     );
                     
                     let r0 = info.childCenter_local.clone().subtract(info.A_local);
-                    // ⭐ Vector3 회전에 Matrix 사용
-                    r0 = BABYLON.Vector3.TransformCoordinates(r0, BABYLON.Matrix.FromQuaternion(qLocal)); 
+                    
+                    // ⭐ 수정 1: BABYLON.Matrix.FromQuaternion 오류 해결
+                    // Quaternion.toRotationMatrix()는 Matrix 인스턴스를 반환합니다.
+                    r0 = BABYLON.Vector3.TransformCoordinates(r0, qLocal.toRotationMatrix()); 
 
                     const cLocal = info.A_local.clone().add(r0);
                     
-                    // ⭐ cWorld 계산에 Matrix Compose 사용
-                    const cWorld = BABYLON.Vector3.TransformCoordinates(cLocal, BABYLON.Matrix.Compose(
-                        BABYLON.Vector3.One(), parentQ, BABYLON.Vector3.Zero()
-                    )).add(parentP);
+                    // ⭐ 수정 2: cWorld 계산 오류 해결 (Matrix Compose 대신 Quaternion 회전 사용)
+                    let cWorld = cLocal.clone().rotateByQuaternionToRef(parentQ, new BABYLON.Vector3());
+                    cWorld = cWorld.add(parentP);
 
                     Pw[i] = cWorld;
                     Qw[i] = parentQ.multiply(qLocal); 

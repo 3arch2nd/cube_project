@@ -610,6 +610,11 @@
             const startPosition = camera.position.clone();
             const endPosition = new THREE.Vector3(0, 0, 8); // 최종 위치: 정면, 거리 8
             const start = performance.now();
+
+            // ⭐ 큐브가 사라지는 것을 방지하기 위해 Controls를 임시 비활성화 (이동 중 조작 방지)
+            if (controls) {
+                controls.enabled = false;
+            }
             
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));

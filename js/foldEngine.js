@@ -294,7 +294,7 @@
     }
 
 
-    // ---------------------------------------
+        // ---------------------------------------
     // foldAnimate (직육면체 지원)
     // ---------------------------------------
     FoldEngine.foldAnimate = function (duration = 1) {
@@ -326,32 +326,45 @@
                     if (p === -1) return; 
 
                     const parentGroup = faceGroups.find(g => g.faceId === p);
-                    const childGroup = faceGroups.find(g => g.faceId === faceId);
+                    const childGroup  = faceGroups.find(g => g.faceId === faceId);
                     
-                    if (!parentGroup || !childGroup) return; 
+                    if (!parentGroup || !childGroup) {
+                        console.warn("[FoldAnimate WARN] Missing parent/child group", { faceId, p });
+                        return; 
+                    }
 
-                    const relation = adj[p].find(x => x.to === faceId);
-                    if (!relation) return; 
-                    
+                    const relation = adj[p] && adj[p].find(x => x.to === faceId);
+                    if (!relation) {
+                        console.warn("[FoldAnimate WARN] Missing relation", { p, faceId, row: adj[p] });
+                        return; 
+                    }
+
                     const { axis, point } = getAxisAndPoint(parentGroup, relation);
-
                     const worldPoint = point.clone().sub(centerOffset3D); 
                     
-                    
-                    // ⭐ 행렬 업데이트 순서 및 호출 (안정화)
-                    
+                    // 행렬 업데이트
                     childGroup.updateMatrix(); 
                     parentGroup.updateMatrix(); 
 
                     parentGroup.updateMatrixWorld(true); 
                     childGroup.updateMatrixWorld(true); 
 
-                    const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld);
+                    // ⭐ matrixWorld 유효성 검사
+                    if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
+                        console.warn(`[FoldAnimate WARN] Invalid matrixWorld for face ${faceId}`, childGroup);
+                        return;
+                    }
+
+                    // ⭐ inverse 계산 (구버전 three.js 방식)
+                    const invMatrix = new THREE.Matrix4();
+                    invMatrix.getInverse(childGroup.matrixWorld);
+
                     const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
                     childGroup.position.sub(localPoint);
                     
-                    const localAxis = axis.clone().transformDirection(childGroup.matrixWorld.getInverse());
+                    // ⭐ childGroup.matrixWorld.getInverse() 제거
+                    const localAxis = axis.clone().applyMatrix4(invMatrix).normalize();
                     
                     childGroup.rotateOnAxis(localAxis, angle);
                     
@@ -360,7 +373,6 @@
                 });
 
                 scene.updateMatrixWorld(true);
-
                 renderer.render(scene, camera);
 
                 if (progress < 1) {
@@ -374,6 +386,7 @@
             requestAnimationFrame(animate);
         });
     };
+
 
     // ---------------------------------------
     // getFaceGroups (validator가 사용)

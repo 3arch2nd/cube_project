@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – ⭐ BABYLON.js 네이티브 XZ 평면 기반 완전 재설계 버전 ⭐
+ * foldEngine.js – ⭐ 모서리 인덱스 및 좌표계 일관성 최종 확보 버전 ⭐
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -11,7 +11,7 @@
     window.FoldEngine = FoldEngine;
 
     // ------------------------------------------------------------
-    // BABYLON 기본 객체 (유지)
+    // BABYLON 기본 객체
     // ------------------------------------------------------------
     let scene = null;
     let camera = null;
@@ -21,7 +21,7 @@
     let animationStarted = false;
 
     // ------------------------------------------------------------
-    // 전개도 데이터 (유지)
+    // 전개도 데이터
     // ------------------------------------------------------------
     let facesSorted = [];
     let adjacency = [];
@@ -34,13 +34,13 @@
     const EPS = 1e-6;
 
     // ------------------------------------------------------------
-    // 색상 (선명) (유지)
+    // 색상 (선명)
     // ------------------------------------------------------------
     const FACE_COLORS = [
         0xff4d4d, 0xffd43b, 0x51cf66, 0x339af0, 0x845ef7, 0xf06595
     ];
 
-    // Babylon.js 재질 생성 함수 (유지)
+    // Babylon.js 재질 생성 함수
     function createFaceMaterial(scene, colorHex) {
         const mat = new BABYLON.StandardMaterial("faceMat" + colorHex, scene);
         mat.diffuseColor = BABYLON.Color3.FromHexString("#" + colorHex.toString(16).padStart(6, '0'));
@@ -52,14 +52,14 @@
 
 
     // ------------------------------------------------------------
-    // 외부에서 필요로 하는 getter (유지)
+    // 외부에서 필요로 하는 getter
     // ------------------------------------------------------------
     FoldEngine.getFaceGroups = function () {
         return nodes;
     };
 
     // ------------------------------------------------------------
-    // 공통 렌더 루프 (유지)
+    // 공통 렌더 루프
     // ------------------------------------------------------------
     function startBaseLoop() {
         if (animationStarted || !engine || !scene) return;
@@ -92,8 +92,7 @@
         scene = new BABYLON.Scene(engine);
         scene.clearColor = new BABYLON.Color4(1, 1, 1, 1);
 
-        // ⭐ 탑 뷰 (Top View) 설정: 전개도가 놓이는 XZ 평면을 위에서 내려다보는 시점
-        // alpha: 수평 회전 (-90도), beta: 수직 0도 (완전히 위), radius: 거리 8
+        // 탑 뷰 (Top View) 설정: XZ 평면을 위에서 내려다보는 시점
         camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, 0, 8, BABYLON.Vector3.Zero(), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
 
@@ -105,8 +104,8 @@
         camera.minZ = 0.01;
         camera.maxZ = 1000;
 
-        new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene); // 위에서 비추는 빛
-        new BABYLON.HemisphericLight("light2", new BABYLON.Vector3(0, -1, 0), scene); // 아래에서 비추는 빛
+        new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene); 
+        new BABYLON.HemisphericLight("light2", new BABYLON.Vector3(0, -1, 0), scene); 
 
         controls = camera;
 
@@ -114,30 +113,24 @@
     };
 
     // --------------------------------------------------------------------
-    // 색상 유틸 (유지)
+    // 색상 유틸
     // --------------------------------------------------------------------
     function getFaceColorById(id) {
         return FACE_COLORS[id % FACE_COLORS.length];
     }
 
     // --------------------------------------------------------------------
-    // 3D 단위 면 생성 (XZ 평면 기반)
+    // 3D 단위 면 생성 ( Plane을 XZ 평면에 눕히는 회전 유지)
     // --------------------------------------------------------------------
     function createUnitFace(faceId) {
-        // ⭐ 개선: Plane 생성 시 초기 회전 제거. XZ 평면에 놓인 면(Y축 정방향) 생성
         const plane = BABYLON.MeshBuilder.CreatePlane("face" + faceId, { width: 1, height: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
-
+        
         plane.material = createFaceMaterial(scene, getFaceColorById(faceId));
-
         const g = new BABYLON.TransformNode("group" + faceId, scene);
         plane.parent = g;
         
-        // ⭐ Babylon.js의 Plane은 기본적으로 YZ 평면에 생성되지만,
-        // MeshBuilder.CreatePlane의 sideOrientation 기본값은 BABYLON.Mesh.DEFAULTSIDE(front face Z축)
-        // 여기서는 XZ 평면(Y축을 바라보는)에 눕히는 것이 2D 전개도 배치에 유리하므로,
-        // Plane을 XZ 평면에 눕히는 회전을 유지하거나, Plane 대신 Box를 사용해야 함.
-        // 기존 큐브 프로젝트와 일관성을 위해 XZ 평면에 눕히는 회전을 유지합니다.
-        plane.rotation.x = Math.PI / 2; // YZ -> XZ 평면에 눕힘
+        // Plane을 XZ 평면에 눕힘 (Y=0)
+        plane.rotation.x = Math.PI / 2; 
 
         plane.setPivotPoint(BABYLON.Vector3.Zero());
 
@@ -151,7 +144,7 @@
 // PART 2 / 3 --------------------------------------------------------------
 
     // --------------------------------------------------------------------
-    // NET CENTER 계산 (유지)
+    // NET CENTER 계산
     // --------------------------------------------------------------------
     function computeNetCenter() {
         let minU = Infinity, maxU = -Infinity;
@@ -170,7 +163,7 @@
 
 
     // --------------------------------------------------------------------
-    // adjacency 구성 (유지)
+    // adjacency 구성
     // --------------------------------------------------------------------
     function buildAdjacency() {
         const N = facesSorted.length;
@@ -220,7 +213,7 @@
 
 
     // --------------------------------------------------------------------
-    // BFS 트리 구성 (유지)
+    // BFS 트리 구성
     // --------------------------------------------------------------------
     function buildTree() {
         const N = facesSorted.length;
@@ -243,7 +236,7 @@
 
 
     // --------------------------------------------------------------------
-    // 기존 3D 면 제거 (유지)
+    // 기존 3D 면 제거
     // --------------------------------------------------------------------
     function clearOldFacesFromScene() {
         nodes.forEach(g => {
@@ -254,29 +247,26 @@
 
 
     // --------------------------------------------------------------------
-    // 2D 평면 배치 (XZ 평면으로 매핑)
+    // 2D 평면 배치 (Z축 반전 로직 재검토)
     // --------------------------------------------------------------------
     function layoutFlat2D() {
         const N = facesSorted.length;
         if (!N) return;
 
         const rootFace = facesSorted[0];
-        // X 좌표: 2D U - Net Center X
         const rootX = (rootFace.u + rootFace.w / 2) - netCenter.x;
-        // Z 좌표: 2D V - Net Center Y에 반전 적용 (Babylon.js Y 상향)
+        // Z 좌표: 2D V - Net Center Y에 반전 적용.
         const rootZ = -((rootFace.v + rootFace.h / 2) - netCenter.y);
 
         const worldPos = [];
         const worldRot = [];
 
-        // Y축은 0 (XZ 평면에 놓임)
-        worldPos[0] = new BABYLON.Vector3(rootX, 0, rootZ);
+        worldPos[0] = new BABYLON.Vector3(rootX, 0, rootZ); // Y=0 (XZ 평면)
         worldRot[0] = new BABYLON.Quaternion();
 
         nodes[0].position.copyFrom(worldPos[0]);
         nodes[0].rotationQuaternion = worldRot[0];
 
-        // BFS 배치
         const Q = [0];
 
         while (Q.length) {
@@ -294,12 +284,11 @@
                     const cCy = f.v + f.h / 2;
 
                     const dx = cCx - pCx;
-                    // Z축 (V축) 변위
-                    const dz = -(cCy - pCy);
+                    const dz = -(cCy - pCy); // Z축 (V축) 변위도 반전 적용
 
                     worldPos[i] = new BABYLON.Vector3(
                         worldPos[p].x + dx,
-                        0, // Y축은 0
+                        0, 
                         worldPos[p].z + dz
                     );
                     worldRot[i] = new BABYLON.Quaternion();
@@ -315,19 +304,19 @@
 
 
     // --------------------------------------------------------------------
-    // hinge 정보 구성 (XZ 평면 기반)
+    // hinge 정보 구성 (모서리 인덱스 최종 수정)
     // --------------------------------------------------------------------
     function buildHingeInfo() {
         const N = facesSorted.length;
         hingeInfo = Array(N).fill(null);
 
-        // ⭐ 개선: 로컬 좌표계 재정의 (X, Z 평면)
-        // 2D 전개도의 모서리: U(x)와 V(y) 대신 X(x)와 -Z(z)로 매핑
+        // 3D XZ 로컬 좌표 (Top View에서 2D와 같은 모양이 나오도록 배치)
+        // 2D V축을 3D -Z축으로 매핑합니다.
         const corners = [
-            new BABYLON.Vector3(-0.5, 0, -0.5), // Edge 0: X=-0.5, Z=-0.5
-            new BABYLON.Vector3(0.5, 0, -0.5),  // Edge 1: X=0.5, Z=-0.5
-            new BABYLON.Vector3(0.5, 0, 0.5),   // Edge 2: X=0.5, Z=0.5
-            new BABYLON.Vector3(-0.5, 0, 0.5)   // Edge 3: X=-0.5, Z=0.5
+            new BABYLON.Vector3(-0.5, 0, -0.5), // A: Left Top
+            new BABYLON.Vector3(0.5, 0, -0.5),  // B: Right Top
+            new BABYLON.Vector3(0.5, 0, 0.5),   // C: Right Bottom
+            new BABYLON.Vector3(-0.5, 0, 0.5)   // D: Left Bottom
         ];
 
         for (let i = 1; i < N; i++) {
@@ -341,27 +330,27 @@
             let A, B;
 
             switch (edgeId) {
-                // edgeId는 2D 전개도 기준 모서리 순서 (0: 하단, 1: 우측, 2: 상단, 3: 좌측)
-                case 0: A = corners[0]; B = corners[1]; break; // 2D: (u,v) -> (u+w, v) => XZ: (-0.5,-0.5) -> (0.5,-0.5)
-                case 1: A = corners[1]; B = corners[2]; break;
-                case 2: A = corners[2]; B = corners[3]; break;
-                case 3: A = corners[3]; B = corners[0]; break;
+                // 2D 인덱스 0번 모서리: (u, v) -> (u+w, v) (Babylon XZ에서 Z=-0.5 모서리)
+                case 0: A = corners[0]; B = corners[1]; break; 
+                // 2D 인덱스 1번 모서리: (u+w, v) -> (u+w, v+h) (Babylon XZ에서 X=0.5 모서리)
+                case 1: A = corners[1]; B = corners[2]; break; 
+                // 2D 인덱스 2번 모서리: (u+w, v+h) -> (u, v+h) (Babylon XZ에서 Z=0.5 모서리)
+                case 2: A = corners[2]; B = corners[3]; break; 
+                // 2D 인덱스 3번 모서리: (u, v+h) -> (u, v) (Babylon XZ에서 X=-0.5 모서리)
+                case 3: A = corners[3]; B = corners[0]; break; 
                 default: continue;
             }
 
             const f = facesSorted[i];
             const pf = facesSorted[p];
 
-            // 2D 평면에서의 자식 중심과 부모 중심 간의 상대 거리
             const dx = (f.u + f.w / 2) - (pf.u + pf.w / 2);
-            const dz = -((f.v + f.h / 2) - (pf.v + pf.h / 2)); // Z축 반전
+            const dz = -((f.v + f.h / 2) - (pf.v + pf.h / 2)); // Z축 반전 유지
 
             hingeInfo[i] = {
                 parent: p,
                 A_local: A.clone(),
-                // 회전 축은 XZ 평면에 놓임 (Y=0)
                 axis_local: B.subtract(A).normalize(),
-                // 자식 중심의 로컬 위치 (Y=0)
                 childCenter_local: new BABYLON.Vector3(dx, 0, dz)
             };
         }
@@ -369,24 +358,23 @@
 
 
     // --------------------------------------------------------------------
-    // 접힘 계산 applyFolding(angle) (XZ 평면 기반)
+    // 접힘 계산 applyFolding(angle) (오류 방지 로직 유지)
     // --------------------------------------------------------------------
     function applyFolding(angle) {
         const N = facesSorted.length;
         if (!N) return;
 
-        const Qw = []; // 월드 회전 (Quaternion)
-        const Pw = []; // 월드 위치 (Vector3)
+        const Qw = []; 
+        const Pw = []; 
 
-        // Root Face (facesSorted[0]) 초기 월드 위치 및 회전 설정 (Y=0)
         Pw[0] = new BABYLON.Vector3(
             (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x,
             0,
-            -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y) // Z축 반전
+            -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y) 
         );
         Qw[0] = new BABYLON.Quaternion();
 
-        const Q = [0]; // BFS 큐
+        const Q = [0]; 
 
         while (Q.length) {
             const p = Q.shift();
@@ -394,7 +382,8 @@
             for (let i = 0; i < N; i++) {
                 if (parentOf[i] === p) {
                     const info = hingeInfo[i];
-                    // 오류 방지
+                    
+                    // 오류 방지 로직
                     if (!info || !info.axis_local) { 
                          Q.push(i);
                          continue; 
@@ -403,22 +392,17 @@
                     const parentQ = Qw[p];
                     const parentP = Pw[p];
 
-                    // 1. 로컬 회전
                     const qLocal = BABYLON.Quaternion.RotationAxis(
                         info.axis_local,
                         angle
                     );
 
-                    // 2. 자식 중심의 힌지 중심 기준 로컬 변위 r0
                     let r0 = info.childCenter_local.clone().subtract(info.A_local);
 
-                    // 3. 로컬 회전 적용: r0를 qLocal만큼 회전
-                    r0 = BABYLON.Vector3.TransformCoordinates(r0, qLocal.toRotationMatrix());
+                    r0 = BABYLON.Vector3.TransformCoordinates(r0, qLocal.toRotationMatrix()); 
 
-                    // 4. 로컬 회전 적용 후의 자식 중심 위치 cLocal
                     const cLocal = info.A_local.clone().add(r0);
 
-                    // 5. 월드 위치/회전 계산
                     let cWorld = cLocal.clone().rotateByQuaternionToRef(parentQ, new BABYLON.Vector3());
                     cWorld = cWorld.add(parentP);
 
@@ -430,13 +414,11 @@
             }
         }
 
-        // 위치/회전 적용
         for (let i = 0; i < N; i++) {
             nodes[i].position = Pw[i];
             nodes[i].rotationQuaternion = Qw[i];
         }
     }
-
 
 // PART 3 / 3 --------------------------------------------------------------
 
@@ -488,8 +470,8 @@
 
         // 5) 카메라/컨트롤 타겟 초기화 (탑 뷰 시점 및 타겟 설정)
         camera.radius = 8;
-        camera.alpha = -Math.PI / 2; // -90도
-        camera.beta = 0;             // 탑 뷰 (Top View)
+        camera.alpha = -Math.PI / 2; 
+        camera.beta = 0;             
         
         // 전개도 중심을 타겟으로 설정 (Y=0)
         const targetX = (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x;
@@ -521,7 +503,7 @@
 
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));
-                const angle = prog * (Math.PI / 2); // 0도 (펼쳐짐) → 90도 (접힘)
+                const angle = prog * (Math.PI / 2); 
 
                 applyFolding(angle);
 
@@ -560,7 +542,7 @@
                 controls.target = targetPosition;
             }
 
-            resolve(); // 즉시 완료
+            resolve(); 
 
         });
     };

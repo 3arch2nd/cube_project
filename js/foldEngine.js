@@ -1,8 +1,15 @@
 /**
- * foldEngine.js – 최신 안정 버전
+ * foldEngine.js – 최신 안정 버전 + 반투명 + OrbitControls
  * 정육면체 전개도 → 3D 접기 / 검증용 엔진
  * ------------------------------------------------------------
  * UI.js / validator.js 와 완전 호환 버전
+ *
+ * ⚙ 추가사항
+ *  - 3D 면 재질을 약간 반투명(opacity 0.75)으로 변경
+ *  - OrbitControls로 마우스 드래그 회전 가능
+ *    · 중심(0,0,0) 고정
+ *    · enableDamping = true, enablePan = false
+ *    · 자동 회전(showSolvedView) 중에는 컨트롤 잠시 정지 후, 끝나면 다시 활성
  */
 
 (function () {
@@ -17,6 +24,11 @@
     let scene = null;
     let camera = null;
     let renderer = null;
+
+    // OrbitControls
+    let controls = null;
+    let animationStarted = false;
+    let isAutoCameraMoving = false;   // showSolvedView 동안 true
 
     // ------------------------------------------------------------
     // 전개도 데이터
@@ -51,6 +63,26 @@
     };
     FoldEngine.scene = scene; // validator / overlap 용
 
+    // ------------------------------------------------------------
+    // 내부: 공통 렌더 루프 시작
+    // ------------------------------------------------------------
+    function startBaseLoop() {
+        if (animationStarted || !renderer || !scene || !camera) return;
+        animationStarted = true;
+
+        function loop() {
+            requestAnimationFrame(loop);
+
+            // 자동 카메라 이동 중에는 OrbitControls update 중지
+            if (controls && !isAutoCameraMoving) {
+                controls.update();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        requestAnimationFrame(loop);
+    }
 
     // --------------------------------------------------------------------
     // INIT
@@ -86,6 +118,21 @@
         const dir = new THREE.DirectionalLight(0xffffff, 1);
         dir.position.set(4, 5, 6);
         scene.add(dir);
+
+        // OrbitControls 세팅 (전역 THREE.OrbitControls가 있다고 가정)
+        if (window.THREE && THREE.OrbitControls) {
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.enablePan = false;          // 패닝 비활성화
+            controls.target.set(0, 0, 0);        // 중심 고정
+            controls.update();
+        } else {
+            controls = null; // 없으면 그냥 컨트롤 없이 렌더만
+        }
+
+        // 공통 렌더 루프 시작
+        startBaseLoop();
     };
 
 
@@ -97,7 +144,7 @@
     }
 
     // --------------------------------------------------------------------
-    // 3D face 생성
+    // 3D face 생성 (반투명 재질)
     // --------------------------------------------------------------------
     function createUnitFace(faceId) {
         const g = new THREE.Group();
@@ -105,7 +152,11 @@
         const geom = new THREE.PlaneGeometry(1, 1);
         const mat = new THREE.MeshLambertMaterial({
             color: getFaceColorById(faceId),
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.75,         // 살짝 비치는 정도
+            depthWrite: true,
+            depthTest: true
         });
         const mesh = new THREE.Mesh(geom, mat);
 
@@ -113,7 +164,7 @@
         const edges = new THREE.EdgesGeometry(geom);
         const edgeLine = new THREE.LineSegments(
             edges,
-            new THREE.LineBasicMaterial({ 
+            new THREE.LineBasicMaterial({
                 color: 0x000000,
                 linewidth: 2
             })
@@ -342,8 +393,8 @@
 
         const Qw = [], Pw = [];
         Pw[0] = new THREE.Vector3(
-            (facesSorted[0].u + 0.5) - netCenter.x,
-            -((facesSorted[0].v + 0.5) - netCenter.y),
+            (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x,
+            -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
             0
         );
         Qw[0] = new THREE.Quaternion();
@@ -392,9 +443,7 @@
     // --------------------------------------------------------------------
     FoldEngine.unfoldImmediate = function () {
         layoutFlat2D();
-        if (renderer && scene && camera) {
-            renderer.render(scene, camera);
-        }
+        // 렌더는 공통 루프에서 수행
     };
 
 
@@ -428,7 +477,7 @@
         });
 
         layoutFlat2D();
-        renderer.render(scene, camera);
+        // 렌더는 공통 루프에서 수행
 
         return Promise.resolve();
     };
@@ -446,7 +495,7 @@
                 const angle = prog * (Math.PI / 2);
 
                 applyFolding(angle);
-                renderer.render(scene, camera);
+                // 렌더는 공통 루프에서 수행
 
                 if (prog < 1) {
                     requestAnimationFrame(step);
@@ -466,6 +515,7 @@
     FoldEngine.showSolvedView = function (sec = 1.5) {
         return new Promise(resolve => {
             const start = performance.now();
+            isAutoCameraMoving = true;
 
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));
@@ -480,10 +530,19 @@
                 );
 
                 camera.lookAt(0, 0, 0);
-                renderer.render(scene, camera);
+                // 렌더는 공통 루프에서 수행
 
-                if (prog < 1) requestAnimationFrame(step);
-                else resolve();
+                if (prog < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    // 자동 회전 종료 → OrbitControls 다시 활성
+                    isAutoCameraMoving = false;
+                    if (controls) {
+                        controls.target.set(0, 0, 0);
+                        controls.update();
+                    }
+                    resolve();
+                }
             }
 
             requestAnimationFrame(step);
@@ -496,9 +555,7 @@
     // --------------------------------------------------------------------
     FoldEngine.foldStaticTo = function (angleRad) {
         applyFolding(angleRad);
-        if (renderer && scene && camera) {
-            renderer.render(scene, camera);
-        }
+        // 렌더는 공통 루프에서 수행
     };
 
 })();

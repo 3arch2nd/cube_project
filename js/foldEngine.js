@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – ⭐ BABYLON.js 최종 포팅 버전 ⭐
+ * foldEngine.js – ⭐ BABYLON.js 최종 포팅 버전 (THREE 참조 오류 해결) ⭐
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -15,9 +15,8 @@
     // ------------------------------------------------------------
     let scene = null;
     let camera = null;
-    let engine = null; // ⭐ Babylon.js는 'renderer' 대신 'engine'을 사용합니다.
+    let engine = null; 
 
-    // Controls 변수는 제거하고 camera 객체 자체를 Controls로 사용
     let controls = null; 
     let animationStarted = false;
 
@@ -40,22 +39,20 @@
     const FACE_COLORS = [
         0xff4d4d, 0xffd43b, 0x51cf66, 0x339af0, 0x845ef7, 0xf06595
     ];
+    
+    // ------------------------------------------------------------
+    // ⭐ THREE.js 잔여 코드 삭제 (createHatchTexture 및 HATCH_TEXTURE)
+    // ------------------------------------------------------------
+    // (THREE.js에 의존하는 createHatchTexture 함수와 HATCH_TEXTURE 상수는 삭제되었습니다.)
 
-    // ------------------------------------------------------------
-    // CanvasTexture 기반 빗금 패턴 생성 (Babylon.js 대체 로직)
-    // ------------------------------------------------------------
+    // ⭐ Babylon.js 재질 생성 함수
     function createFaceMaterial(scene, colorHex) {
-        // ⭐ Babylon.js StandardMaterial 사용
         const mat = new BABYLON.StandardMaterial("faceMat" + colorHex, scene);
         mat.diffuseColor = BABYLON.Color3.FromHexString("#" + colorHex.toString(16).padStart(6, '0'));
-        mat.alpha = 0.78; // 반투명 설정
-        mat.backFaceCulling = false; // 양면 렌더링 (THREE.DoubleSide 대체)
-        
-        // 빗금 텍스처는 복잡하므로, 현재는 기본 색상만 적용합니다.
-        
+        mat.alpha = 0.78; 
+        mat.backFaceCulling = false; // 양면 렌더링
         return mat;
     }
-    // (THREE.js의 createHatchTexture 및 HATCH_TEXTURE는 삭제됨)
 
 
     // ------------------------------------------------------------
@@ -65,16 +62,16 @@
         return nodes;
     };
 
-    // FoldEngine.scene = scene; // Babylon.js는 Scene 객체를 전역에 노출하지 않음
+    // FoldEngine.scene = scene; // Three.js 전용 코드 (삭제)
 
     // ------------------------------------------------------------
-    // 공통 렌더 루프 (Babylon.js의 Engine 루프로 대체)
+    // 공통 렌더 루프 (Babylon.js Engine 루프로 대체)
     // ------------------------------------------------------------
     function startBaseLoop() {
         if (animationStarted || !engine || !scene) return;
         animationStarted = true;
 
-        // ⭐ Babylon.js의 메인 렌더 루프 사용
+        // ⭐ Babylon.js의 메인 렌더 루프 사용 (Controls 업데이트 자동 포함)
         engine.runRenderLoop(function () {
             if (scene) {
                 scene.render();
@@ -98,7 +95,6 @@
 
         // ⭐ Babylon.js 엔진 생성
         if (engine) {
-             // 재초기화 방지 (Three.js init 로직을 Babylon.js에 맞게 단순화)
              return; 
         }
 
@@ -120,12 +116,12 @@
         camera.inertia = 0.8; 
         camera.angularSensibilityX = 3000;
         camera.angularSensibilityY = 3000;
+        camera.minZ = 0.1; // 카메라 줌 범위 설정
 
         // 조명 추가
         new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(1, 1, 0), scene);
         
-        // Controls 객체 대신 카메라 객체를 참조
-        controls = camera; 
+        controls = camera; // Controls 객체 대신 카메라 객체를 참조
 
         startBaseLoop();
     };
@@ -142,7 +138,7 @@
     // --------------------------------------------------------------------
     function createUnitFace(faceId) {
         // ⭐ BABYLON.MeshBuilder.CreatePlane을 사용하여 면 생성
-        const plane = BABYLON.MeshBuilder.CreatePlane("face" + faceId, { width: 1, height: 1 }, scene);
+        const plane = BABYLON.MeshBuilder.CreatePlane("face" + faceId, { width: 1, height: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
         
         // ⭐ 재질 생성 및 할당
         plane.material = createFaceMaterial(scene, getFaceColorById(faceId));
@@ -151,11 +147,11 @@
         const g = new BABYLON.TransformNode("group" + faceId, scene);
         plane.parent = g; 
         
-        // 큐브 면의 중심을 피봇으로 설정 (Babylon.js는 월드 피봇을 사용하므로, Mesh를 TransformNode에 붙여 그룹화)
+        // 면의 중심을 피봇으로 설정
         plane.setPivotPoint(BABYLON.Vector3.Zero());
 
-        g.id = faceId; // Face ID 저장
-        g.metadata = { isCubeFace: true }; // Custom data 저장 방식
+        g.id = faceId; 
+        g.metadata = { isCubeFace: true }; 
         nodes.push(g);
         
         return g;
@@ -274,9 +270,9 @@
         const worldPos = [];
         const worldRot = [];
 
-        // ⭐ THREE.Vector3 -> BABYLON.Vector3
+        // ⭐ BABYLON.Vector3
         worldPos[0] = new BABYLON.Vector3(rootX, rootY, 0); 
-        // ⭐ THREE.Quaternion -> BABYLON.Quaternion
+        // ⭐ BABYLON.Quaternion
         worldRot[0] = new BABYLON.Quaternion(); 
 
         // ⭐ 위치/회전 적용 (Babylon.js 구문)
@@ -363,7 +359,7 @@
             hingeInfo[i] = {
                 parent: p,
                 A_local: A.clone(),
-                // ⭐ BABYLON.Vector3
+                // ⭐ BABYLON.Vector3 연산
                 axis_local: B.subtract(A).normalize(), 
                 childCenter_local: new BABYLON.Vector3(dx, dy, 0) 
             };
@@ -411,7 +407,7 @@
                     
                     // ⭐ BABYLON.Vector3 연산
                     let r0 = info.childCenter_local.clone().subtract(info.A_local);
-                    r0 = r0.rotateByQuaternionToRef(qLocal, r0); // BABYLON 회전 함수 사용
+                    r0 = r0.rotateByQuaternionToRef(qLocal, r0); // BABYLON 회전 함수
 
                     const cLocal = info.A_local.clone().add(r0);
                     
@@ -446,8 +442,8 @@
         layoutFlat2D();
         // 렌더는 공통 루프에서 자동 수행
         if (controls) {
-            // controls.target.set(0, 0, 0); // ArcRotateCamera는 target이 이미 고정
-            controls.update(); // Babylon.js에서 controls.update()는 불필요하지만 안전을 위해 유지
+            controls.target = BABYLON.Vector3.Zero();
+            // controls.update(); // Babylon.js에서는 불필요
         }
     };
 
@@ -460,7 +456,7 @@
             console.warn("[FoldEngine.loadNet] invalid net");
             return Promise.resolve();
         }
-        if (!scene || !camera || !engine) { // ⭐ renderer -> engine
+        if (!scene || !camera || !engine) { 
             console.warn("[FoldEngine.loadNet] init 먼저 필요");
             return Promise.resolve();
         }
@@ -484,9 +480,8 @@
             // scene.add(g); // Babylon.js는 Mesh/TransformNode를 생성 시 Scene에 자동 추가
         });
 
+        // 4) (있다면) 이전 빗금 그룹 제거 후 새로 생성 (Three.js 로직 제거)
 
-        // 4) (있다면) 이전 빗금 그룹 제거 후 새로 생성 (Babylon.js에서는 복잡하므로 로직 삭제)
-        
         // 5) 평면 상태로 배치
         layoutFlat2D();
 
@@ -497,8 +492,8 @@
         camera.beta = Math.PI / 2;
         
         if (controls) {
-            controls.target = BABYLON.Vector3.Zero(); // ⭐ 타겟 강제 설정
-            controls.update(); // Babylon.js에서 update는 불필요하지만 안전을 위해 유지
+            controls.target = BABYLON.Vector3.Zero(); 
+            // controls.update(); // Babylon.js에서는 불필요
         }
 
         return Promise.resolve();
@@ -513,7 +508,7 @@
             
             // ⭐ 핵심: 애니메이션 시작 시 Controls 비활성화 (Babylon.js 구문)
             if (controls) {
-                controls.detachControl(engine.get );
+                controls.detachControl(engine.get ).canvas); // Babylon.js의 attachControl 해제
             }
 
             const start = performance.now();

@@ -365,7 +365,7 @@ FoldEngine.foldAnimate(1.0)
         alert("정답 확인 중 오류가 발생했습니다.");
         document.getElementById("btn-check").disabled = false;
     });
-
+});
 
         document.getElementById("btn-next").addEventListener("click", () => {
             currentIndex++;

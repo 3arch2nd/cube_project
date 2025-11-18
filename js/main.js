@@ -41,9 +41,14 @@
         netCanvas = document.getElementById("net-canvas");
         threeCanvas = document.getElementById("three-view");
 
-        // ✨ 수정 포인트 1: 3D 엔진 초기화는 여기서 단 한 번만 호출합니다.
+        // ✨ 수정 포인트 1: 3D 엔진 초기화 안정화 (try-catch 블록 추가)
         if (typeof FoldEngine !== 'undefined') {
-            FoldEngine.init(threeCanvas); 
+            try {
+                FoldEngine.init(threeCanvas);
+            } catch (e) {
+                // 3D 엔진 초기화가 실패하면 콘솔에 알림
+                console.error("FoldEngine.init 실패: THREE.js 또는 OrbitControls 로드 문제.", e);
+            }
         }
 
         bindModeSelectPage();
@@ -255,7 +260,7 @@
         UI.renderNet(currentProblem.net, opt);
 
         // 3D 엔진 초기화 및 전개도 상태 표시
-        // FoldEngine.init(threeCanvas); // ❌ 수정 포인트 2: 이 줄은 삭제했습니다. (init에서 이미 호출됨)
+        // FoldEngine.init(threeCanvas); // ❌ 이 줄은 삭제되었습니다. (init에서 이미 호출됨)
 
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
 
@@ -337,8 +342,8 @@
                 // 👇 이 부분이 Promise 체인의 마지막 then()입니다.
                 .then(() => {
                     
-                    // ⭐ 수정 포인트: 이 전체 로직을 setTimeout으로 감쌉니다.
-                    setTimeout(() => { // 큐브가 완전히 닫히고 SolveView가 실행된 후 50ms 딜레이 시작
+                    // ✨ 수정 2: 큐브가 완전히 닫힌 후 50ms 딜레이를 적용합니다.
+                    setTimeout(() => {
                         if (correct) {
                             alert("정답입니다! 🎉");
                             btnCheck.classList.add("hidden");
@@ -361,7 +366,7 @@
                                 }
                             }, 1500); // 이 1500ms는 오답 후 펼쳐진 상태를 보여주는 딜레이입니다.
                         }
-                    }, 50); // 👈 여기에 50ms 딜레이를 적용합니다.
+                    }, 50); // 👈 50ms 딜레이 적용
 
                 })
                 .catch(err => {

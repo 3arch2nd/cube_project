@@ -1,5 +1,5 @@
 /**
- * main.js – 완전 통합 버전 (정육면체 전용)
+ * main.js – 정육면체 전개도/겹침 찾기 통합
  */
 
 (function () {
@@ -13,11 +13,7 @@
     };
     window.CubeProject.MAIN_MODE = MAIN_MODE;
 
-    const NET_TYPE = { CUBE: "cube" };
-    const SOLID_TYPE = { CUBE: "cube" };
-
     const OVERLAP_MODE = { POINT: "point", EDGE: "edge", BOTH: "both" };
-
     const RUN_MODE = { PRACTICE: "practice", REAL: "real" };
 
     let mainMode = null;
@@ -63,15 +59,11 @@
 
         pages.forEach(id => {
             const pageElement = document.getElementById(id);
-            if (pageElement) {
-                pageElement.classList.add("hidden");
-            }
+            if (pageElement) pageElement.classList.add("hidden");
         });
 
         const targetPage = document.getElementById(pageId);
-        if (targetPage) {
-            targetPage.classList.remove("hidden");
-        }
+        if (targetPage) targetPage.classList.remove("hidden");
     }
 
     function bindModeSelectPage() {
@@ -115,7 +107,6 @@
                 document.querySelectorAll("#ov-type-group button")
                     .forEach(b => b.classList.remove("selected"));
                 btn.classList.add("selected");
-
                 overlapMode = btn.dataset.type;
             });
         });
@@ -154,7 +145,6 @@
 
     function generateOneOverlapProblem() {
         const netObj = CubeNets.getRandomOverlapProblem(overlapMode);
-
         return {
             mode: MAIN_MODE.OVERLAP_FIND,
             solid: "cube",
@@ -223,11 +213,8 @@
 
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
             const removedId = window.UI.getRemovedFaceId();
-            const removedFaceIndex = netFor3D.faces.findIndex(f => f.id === removedId);
-
-            if (removedFaceIndex !== -1) {
-                netFor3D.faces.splice(removedFaceIndex, 1);
-            }
+            const idxF = netFor3D.faces.findIndex(f => f.id === removedId);
+            if (idxF !== -1) netFor3D.faces.splice(idxF, 1);
         }
 
         await FoldEngine.loadNet(netFor3D);
@@ -240,14 +227,12 @@
 
     function bindProblemButtons() {
         document.getElementById("btn-check").addEventListener("click", async () => {
-
             document.getElementById("btn-check").disabled = true;
 
             let correct = false;
             let netForFold = currentProblem.net;
 
             if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-
                 const placedPos = window.UI.placed;
 
                 if (placedPos) {
@@ -277,26 +262,24 @@
                 }
 
                 await FoldEngine.loadNet(netForFold);
-
                 correct = Validator.validateNet(netForFold);
-
             } else {
+                // 겹침 찾기 모드
                 await FoldEngine.loadNet(netForFold);
                 correct = window.Overlap.checkUserAnswer(netForFold);
             }
 
             FoldEngine.unfoldImmediate();
 
-            /* ⬇⬇⬇ 접기 → 카메라 회전 → 정답 처리 전체 정상 체인 */
-FoldEngine.foldAnimate(1)
-    .then(() => FoldEngine.showSolvedView(1.5))
+            FoldEngine.foldAnimate(1.5)         // ← 여기 1.5초
+                .then(() => FoldEngine.showSolvedView(1.5))
                 .then(() => {
                     if (correct) {
                         alert("정답입니다! 🎉");
                         document.getElementById("btn-check").classList.add("hidden");
                         document.getElementById("btn-next").classList.remove("hidden");
                     } else {
-                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔\n" + Validator.lastError);
+                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔\n" + (Validator.lastError || ""));
 
                         document.getElementById("btn-check").disabled = false;
 
@@ -307,7 +290,11 @@ FoldEngine.foldAnimate(1)
                                 Overlap.startSelection(currentProblem.net);
                                 UI.renderNet(currentProblem.net, {});
                             } else {
-                                loadProblem();
+                                // 같은 문제 다시
+                                UI.renderNet(currentProblem.net, {
+                                    removeOne: true,
+                                    highlightPositions: true
+                                });
                             }
                         }, 1500);
                     }
@@ -336,7 +323,7 @@ FoldEngine.foldAnimate(1)
     }
 
     function showResultPage() {
-        const correctCount = currentIndex;
+        const correctCount = currentIndex; // TODO: 정답 개수 따로 카운트하려면 수정 가능
 
         showPage("result-page");
         document.getElementById("result-acc").textContent =

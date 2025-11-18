@@ -152,19 +152,18 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	}
 
-	function rotateLeft( angle ) {
-
+	// ✨ 수정 1: rotateLeft 함수를 this에 바인딩
+	this.rotateLeft = function ( angle ) {
 		sphericalDelta.theta -= angle;
+	};
 
-	}
-
-	function rotateUp( angle ) {
-
+	// ✨ 수정 1: rotateUp 함수를 this에 바인딩
+	this.rotateUp = function ( angle ) {
 		sphericalDelta.phi -= angle;
+	};
 
-	}
-
-	var panLeft = function() {
+	// ✨ 수정 2: panLeft 함수를 this에 바인딩
+	this.panLeft = ( function() {
 
 		var v = new THREE.Vector3();
 
@@ -177,9 +176,10 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		};
 
-	}();
+	} )();
 
-	var panUp = function() {
+	// ✨ 수정 2: panUp 함수를 this에 바인딩
+	this.panUp = ( function() {
 
 		var v = new THREE.Vector3();
 
@@ -192,7 +192,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		};
 
-	}();
+	} )();
 
 	// To do: implement key navigation in screen space
 
@@ -212,15 +212,15 @@ THREE.OrbitControls = function ( object, domElement ) {
 			targetDistance *= Math.tan( ( scope.object.fov / 2 ) * Math.PI / 180.0 );
 
 			// we actually don't use screen width here, since the screen can be any aspect ratio
-			panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix );
-			panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix );
+			scope.panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix ); // ✨ this.panLeft 대신 scope.panLeft 그대로 사용
+			scope.panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix ); // ✨ this.panUp 대신 scope.panUp 그대로 사용
 
 		} else if ( scope.object.orthographic ) {
 
 			// orthographic
 
-			panLeft( deltaX * ( scope.object.right - scope.object.left ) / scope.object.zoom / element.clientWidth, scope.object.matrix );
-			panUp( deltaY * ( scope.object.top - scope.object.bottom ) / scope.object.zoom / element.clientHeight, scope.object.matrix );
+			scope.panLeft( deltaX * ( scope.object.right - scope.object.left ) / scope.object.zoom / element.clientWidth, scope.object.matrix );
+			scope.panUp( deltaY * ( scope.object.top - scope.object.bottom ) / scope.object.zoom / element.clientHeight, scope.object.matrix );
 
 		} else {
 
@@ -299,7 +299,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 			if ( scope.autoRotate && state === STATE.NONE ) {
 
-				rotateLeft( getAutoRotationAngle() );
+				scope.rotateLeft( getAutoRotationAngle() ); // ✨ rotateLeft 호출 방식 수정
 
 			}
 
@@ -342,7 +342,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 			//
 
-			if ( lastPosition.distanceTo( scope.object.position ) * lastPosition.distanceTo( scope.object.position ) > EPS || // ✨ 수정 1: distanceSq 대신 distanceTo 제곱 사용
+			if ( lastPosition.distanceTo( scope.object.position ) * lastPosition.distanceTo( scope.object.position ) > EPS || // ✨ distanceSq 대신 distanceTo 제곱 사용
 				 lastQuaternion.angleTo( scope.object.quaternion ) > EPS ||
 				 zoomChanged ) {
 

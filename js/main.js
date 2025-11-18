@@ -1,8 +1,8 @@
 /**
  * main.js – 정육면체 전개도/겹침 통합 최신 버전
- *  - 전개도 완성하기
- *  - 겹쳐지는 부분 찾기
- *  - ui.js / validator.js / foldEngine.js / overlap.js 와 연동
+ * - 전개도 완성하기
+ * - 겹쳐지는 부분 찾기
+ * - ui.js / validator.js / foldEngine.js / overlap.js 와 연동
  */
 
 (function () {
@@ -40,6 +40,11 @@
     function init() {
         netCanvas = document.getElementById("net-canvas");
         threeCanvas = document.getElementById("three-view");
+
+        // ✨ 수정 포인트 1: 3D 엔진 초기화는 여기서 단 한 번만 호출합니다.
+        if (typeof FoldEngine !== 'undefined') {
+            FoldEngine.init(threeCanvas); 
+        }
 
         bindModeSelectPage();
         bindNetSetupPage();
@@ -250,7 +255,7 @@
         UI.renderNet(currentProblem.net, opt);
 
         // 3D 엔진 초기화 및 전개도 상태 표시
-        FoldEngine.init(threeCanvas);
+        // FoldEngine.init(threeCanvas); // ❌ 수정 포인트 2: 이 줄은 삭제했습니다. (init에서 이미 호출됨)
 
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
 
@@ -327,7 +332,7 @@
             FoldEngine.unfoldImmediate();
 
             FoldEngine
-                .foldAnimate(1.5)          // 접기 속도 (조금 느리게)
+                .foldAnimate(1.5)        // 접기 속도 (조금 느리게)
                 .then(() => FoldEngine.showSolvedView(1.5)) // 회전
                 .then(() => {
                     if (correct) {
@@ -380,7 +385,7 @@
 
     // ------------------------------------------------
     // 결과 페이지
-    //  (지금은 단순히 '푼 문제 수 / 전체' 비율로 표시)
+    // (지금은 단순히 '푼 문제 수 / 전체' 비율로 표시)
     // ------------------------------------------------
     function showResultPage() {
         const correctCount = currentIndex; // 추후 정답 개수 별도 집계 가능

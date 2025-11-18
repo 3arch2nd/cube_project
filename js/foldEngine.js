@@ -1,10 +1,16 @@
 /**
- * foldEngine.js – 정육면체(6면, 1×1) 전개도 3D 접기 엔진
- *
- * - UI의 net.faces: { id, u, v, w, h } 사용 (w=h=1)
- * - 전개도(2D) → 접기(3D) 애니메이션
- * - 각 면 색 다르게, 내부 선 진하게
- * - Overlap.js / Validator.js에서 3D 정보 읽을 수 있도록 getFaceGroups 제공
+ * foldEngine.js – 정육면체 전개도 전용 Fold 엔진
+ * ----------------------------------------------
+ * - net.faces: { id, u, v, w, h }, w=h=1
+ * - 2D 전개도 → 3D 접기 애니메이션
+ * - 공개 메서드:
+ *    FoldEngine.init(canvas)
+ *    FoldEngine.loadNet(net)
+ *    FoldEngine.unfoldImmediate()
+ *    FoldEngine.foldAnimate(sec)
+ *    FoldEngine.showSolvedView(sec)
+ *    FoldEngine.foldStaticTo(angle)   // validator에서 사용 (즉시 접기)
+ *    FoldEngine.getFaceGroups()       // Overlap / Validator에서 사용
  */
 
 (function () {
@@ -13,34 +19,45 @@
     const FoldEngine = {};
     window.FoldEngine = FoldEngine;
 
+    // THREE 기본
     let scene = null;
     let camera = null;
     let renderer = null;
 
+    // 전개도/트리
     let facesSorted = [];
     let adjacency = [];
     let parentOf = [];
     let netCenter = { x: 0, y: 0 };
 
+    // 3D face 그룹들
     let nodes = [];
+
+    // face 색 (3D, id 기반)
+    const FACE_COLORS = [
+        0xff6666, // 빨
+        0xffd43b, // 노
+        0x69db7c, // 초
+        0x4dabf7, // 파
+        0x9775fa, // 보
+        0xf783ac  // 분홍
+    ];
 
     const EPS = 1e-6;
 
-    // 3D 면 색 팔레트 (더 진하게)
-    const FACE_COLORS = [
-        0xff8a80, // 빨강 계열
-        0xffd54f, // 노랑 계열
-        0x81c784, // 초록 계열
-        0x64b5f6, // 파랑 계열
-        0xba68c8, // 보라 계열
-        0xf06292  // 분홍 계열
-    ];
+    FoldEngine.getFaceGroups = function () {
+        return nodes;
+    };
 
+    // 외부에서 scene 접근 필요할 때 사용 (Overlap 등)
+    FoldEngine.scene = scene;
+
+    // ------------------------------------------------
+    // init
+    // ------------------------------------------------
     FoldEngine.init = function (canvas) {
-        console.log("[FoldEngine.init] start");
-
         if (!canvas) {
-            console.warn("[FoldEngine.init] canvas is null/undefined");
+            console.warn("[FoldEngine.init] canvas is null");
             return;
         }
 
@@ -63,40 +80,49 @@
         );
         camera.position.set(0, 0, 8);
         camera.lookAt(0, 0, 0);
-        FoldEngine.camera = camera;
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-        const light = new THREE.DirectionalLight(0xffffff, 1.1);
-        light.position.set(5, 8, 6);
+        const light = new THREE.DirectionalLight(0xffffff, 1.0);
+        light.position.set(4, 5, 6);
         scene.add(light);
-
-        console.log("[FoldEngine.init] done");
     };
 
-    function createUnitFace() {
+    // ------------------------------------------------
+    // 3D face 생성
+    // ------------------------------------------------
+    function getFaceColorById(id) {
+        const index = (typeof id === "number") ? (id % FACE_COLORS.length) : 0;
+        return FACE_COLORS[index];
+    }
+
+    function createUnitFace(faceId) {
         const g = new THREE.Group();
 
         const geom = new THREE.PlaneGeometry(1, 1);
         const mat = new THREE.MeshLambertMaterial({
-            color: 0xffffff,
+            color: getFaceColorById(faceId),
             side: THREE.DoubleSide
         });
         const mesh = new THREE.Mesh(geom, mat);
 
         const edges = new THREE.EdgesGeometry(geom);
-        const line = new THREE.LineSegments(
+        const edgeLine = new THREE.LineSegments(
             edges,
-            new THREE.LineBasicMaterial({ color: 0x000000 })
+            new THREE.LineBasicMaterial({ color: 0x111111, linewidth: 2 })
         );
 
         g.add(mesh);
-        g.add(line);
+        g.add(edgeLine);
 
         g.userData.isCubeFace = true;
+        g.userData.faceId = faceId;
 
         return g;
     }
 
+    // ------------------------------------------------
+    // 전개도 중심
+    // ------------------------------------------------
     function computeNetCenter() {
         let minU = Infinity, maxU = -Infinity;
         let minV = Infinity, maxV = -Infinity;
@@ -114,20 +140,21 @@
 
         netCenter.x = (minU + maxU) / 2;
         netCenter.y = (minV + maxV) / 2;
-
-        console.log("[FoldEngine] netCenter:", netCenter);
     }
 
+    // ------------------------------------------------
+    // adjacency (index 기반)
+    // ------------------------------------------------
     function buildAdjacency() {
         const N = facesSorted.length;
         adjacency = [...Array(N)].map(() => []);
 
         function edges(face) {
             return [
-                { a: [face.u, face.v], b: [face.u + face.w, face.v] },
-                { a: [face.u + face.w, face.v], b: [face.u + face.w, face.v + face.h] },
-                { a: [face.u + face.w, face.v + face.h], b: [face.u, face.v + face.h] },
-                { a: [face.u, face.v + face.h], b: [face.u, face.v] }
+                { a:[face.u, face.v],              b:[face.u + face.w, face.v]               }, // top
+                { a:[face.u + face.w, face.v],     b:[face.u + face.w, face.v + face.h]      }, // right
+                { a:[face.u + face.w, face.v + face.h], b:[face.u, face.v + face.h]          }, // bottom
+                { a:[face.u, face.v + face.h],     b:[face.u,         face.v]                }  // left
             ];
         }
 
@@ -154,10 +181,11 @@
                 }
             }
         }
-
-        console.log("[FoldEngine] adjacency:", JSON.stringify(adjacency, null, 2));
     }
 
+    // ------------------------------------------------
+    // parentOf (BFS 트리)
+    // ------------------------------------------------
     function buildTree() {
         const N = facesSorted.length;
         parentOf = Array(N).fill(null);
@@ -174,23 +202,23 @@
                 }
             });
         }
-
-        console.log("[FoldEngine] parentOf:", parentOf);
     }
 
+    // ------------------------------------------------
+    // 이전 faces 제거
+    // ------------------------------------------------
     function clearOldFacesFromScene() {
         if (!scene) return;
 
-        nodes.forEach(node => {
-            if (node && node.parent) {
-                node.parent.remove(node);
-            }
+        nodes.forEach(n => {
+            if (n && n.parent) n.parent.remove(n);
         });
         nodes = [];
-
-        console.log("[FoldEngine] cleared old faces");
     }
 
+    // ------------------------------------------------
+    // 전개도 평면 상태로 배치
+    // ------------------------------------------------
     function layoutFlat2DIntoNodes() {
         if (!facesSorted.length || !nodes.length) return;
 
@@ -214,12 +242,14 @@
         while (Q.length) {
             const p = Q.shift();
             const parentFace = facesSorted[p];
+
             const pCenterU = parentFace.u + parentFace.w / 2;
             const pCenterV = parentFace.v + parentFace.h / 2;
 
             for (let i = 0; i < N; i++) {
                 if (parentOf[i] === p) {
                     const face = facesSorted[i];
+
                     const cCenterU = face.u + face.w / 2;
                     const cCenterV = face.v + face.h / 2;
 
@@ -247,18 +277,20 @@
         scene.updateMatrixWorld(true);
     }
 
+    // ------------------------------------------------
+    // hinge 정보
+    // ------------------------------------------------
     let hingeInfo = [];
 
     function buildHingeInfo() {
         const N = facesSorted.length;
         hingeInfo = new Array(N).fill(null);
-
         hingeInfo[0] = null;
 
         const corners = [
-            new THREE.Vector3(-0.5, 0.5, 0),
-            new THREE.Vector3(0.5, 0.5, 0),
-            new THREE.Vector3(0.5, -0.5, 0),
+            new THREE.Vector3(-0.5,  0.5, 0),
+            new THREE.Vector3( 0.5,  0.5, 0),
+            new THREE.Vector3( 0.5, -0.5, 0),
             new THREE.Vector3(-0.5, -0.5, 0)
         ];
 
@@ -270,7 +302,7 @@
             }
 
             const parentFace = facesSorted[parent];
-            const childFace = facesSorted[i];
+            const childFace  = facesSorted[i];
 
             const pCenterU = parentFace.u + parentFace.w / 2;
             const pCenterV = parentFace.v + parentFace.h / 2;
@@ -283,20 +315,18 @@
 
             const rel = adjacency[parent].find(r => r.to === i);
             if (!rel) {
-                console.warn("[FoldEngine.buildHingeInfo] no adjacency for parent", parent, "child", i);
                 hingeInfo[i] = null;
                 continue;
             }
 
             const edgeId = rel.edgeA;
-            let A = null, B = null;
+            let A, B;
             switch (edgeId) {
                 case 0: A = corners[0]; B = corners[1]; break;
                 case 1: A = corners[1]; B = corners[2]; break;
                 case 2: A = corners[2]; B = corners[3]; break;
                 case 3: A = corners[3]; B = corners[0]; break;
                 default:
-                    console.warn("[FoldEngine.buildHingeInfo] invalid edgeId:", edgeId);
                     hingeInfo[i] = null;
                     continue;
             }
@@ -309,11 +339,12 @@
                 axis_local,
                 childCenter_local
             };
-
-            console.log("[FoldEngine] hingeInfo for child", i, ":", hingeInfo[i]);
         }
     }
 
+    // ------------------------------------------------
+    // angle 에 따른 접힘 적용
+    // ------------------------------------------------
     function applyFolding(angle) {
         const N = facesSorted.length;
         if (!N || !nodes.length) return;
@@ -342,18 +373,17 @@
                     const parentQ = Q_world[p];
                     const parentP = P_world[p];
 
-                    const q_local = new THREE.Quaternion().setFromAxisAngle(
-                        info.axis_local,
-                        angle
-                    );
+                    const q_local = new THREE.Quaternion()
+                        .setFromAxisAngle(info.axis_local, angle);
 
                     const r0 = info.childCenter_local.clone().sub(info.A_local);
                     r0.applyQuaternion(q_local);
                     const c_local_folded = info.A_local.clone().add(r0);
 
                     const childQ = parentQ.clone().multiply(q_local);
-
-                    const c_world = c_local_folded.clone().applyQuaternion(parentQ).add(parentP);
+                    const c_world = c_local_folded.clone()
+                        .applyQuaternion(parentQ)
+                        .add(parentP);
 
                     Q_world[i] = childQ;
                     P_world[i] = c_world;
@@ -371,29 +401,30 @@
         scene.updateMatrixWorld(true);
     }
 
+    // ------------------------------------------------
+    // 공개: unfoldImmediate (평면 상태)
+    // ------------------------------------------------
     FoldEngine.unfoldImmediate = function () {
-        console.log("[FoldEngine.unfoldImmediate]");
         layoutFlat2DIntoNodes();
         if (renderer && scene && camera) {
             renderer.render(scene, camera);
         }
     };
 
+    // ------------------------------------------------
+    // 공개: loadNet
+    // ------------------------------------------------
     FoldEngine.loadNet = function (net) {
-        console.log("[FoldEngine.loadNet] net:", net);
-
         if (!net || !Array.isArray(net.faces)) {
             console.warn("[FoldEngine.loadNet] invalid net");
             return Promise.resolve();
         }
-
         if (!scene || !camera || !renderer) {
-            console.warn("[FoldEngine.loadNet] init이 먼저 호출되지 않았습니다.");
+            console.warn("[FoldEngine.loadNet] init 먼저 호출 필요");
             return Promise.resolve();
         }
 
         facesSorted = [...net.faces].slice().sort((a, b) => a.id - b.id);
-        console.log("[FoldEngine.loadNet] facesSorted:", facesSorted);
 
         computeNetCenter();
         buildAdjacency();
@@ -405,26 +436,13 @@
         const N = facesSorted.length;
         nodes = [];
         for (let i = 0; i < N; i++) {
-            const g = createUnitFace();
-            g.userData.faceIndex = i;
-            g.userData.faceId = facesSorted[i].id;
-
-            // 면 색 지정
-            const colorIdx = facesSorted[i].id % FACE_COLORS.length;
-            const color = FACE_COLORS[colorIdx];
-            const mesh = g.children.find(ch => ch.isMesh);
-            if (mesh) {
-                mesh.material.color.setHex(color);
-                mesh.material.transparent = false;
-                mesh.material.opacity = 1.0;
-            }
-
+            const face = facesSorted[i];
+            const g = createUnitFace(face.id);
             nodes.push(g);
             scene.add(g);
         }
 
         layoutFlat2DIntoNodes();
-
         if (renderer && scene && camera) {
             renderer.render(scene, camera);
         }
@@ -432,11 +450,12 @@
         return Promise.resolve();
     };
 
+    // ------------------------------------------------
+    // 공개: foldAnimate (학생용 애니메이션)
+    // ------------------------------------------------
     FoldEngine.foldAnimate = function (sec = 1.5) {
-        console.log("[FoldEngine.foldAnimate] start, sec=", sec);
-
         if (!renderer || !scene || !camera) {
-            console.warn("[FoldEngine.foldAnimate] renderer/scene/camera not ready");
+            console.warn("[FoldEngine.foldAnimate] 구성 미완료");
             return Promise.resolve();
         }
 
@@ -448,13 +467,11 @@
                 const angle = prog * (Math.PI / 2);
 
                 applyFolding(angle);
-
                 renderer.render(scene, camera);
 
                 if (prog < 1) {
                     requestAnimationFrame(step);
                 } else {
-                    console.log("[FoldEngine.foldAnimate] end");
                     resolve();
                 }
             }
@@ -463,11 +480,12 @@
         });
     };
 
+    // ------------------------------------------------
+    // 공개: showSolvedView (카메라 회전)
+    // ------------------------------------------------
     FoldEngine.showSolvedView = function (sec = 1.5) {
-        console.log("[FoldEngine.showSolvedView] start, sec=", sec);
-
         if (!renderer || !scene || !camera) {
-            console.warn("[FoldEngine.showSolvedView] renderer/scene/camera not ready");
+            console.warn("[FoldEngine.showSolvedView] 구성 미완료");
             return Promise.resolve();
         }
 
@@ -491,7 +509,6 @@
                 if (prog < 1) {
                     requestAnimationFrame(step);
                 } else {
-                    console.log("[FoldEngine.showSolvedView] end");
                     resolve();
                 }
             }
@@ -500,9 +517,14 @@
         });
     };
 
-    // Overlap / Validator용: 현재 face 그룹 반환
-    FoldEngine.getFaceGroups = function () {
-        return nodes ? nodes.slice() : [];
+    // ------------------------------------------------
+    // 공개: foldStaticTo(angle) – validator용 즉시 접기
+    // ------------------------------------------------
+    FoldEngine.foldStaticTo = function (angleRad) {
+        applyFolding(angleRad);
+        if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+        }
     };
 
 })();

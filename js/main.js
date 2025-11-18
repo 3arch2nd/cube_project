@@ -334,33 +334,34 @@
             }
 
             // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
-            FoldEngine.unfoldImmediate(); 
-            
-            // 오답 시에도 접힘 애니메이션 실행 (학습 효과)
-            FoldEngine.foldAnimate(1) 
-                .then(() => {
-                    if (correct) {
-                        alert("정답입니다! 🎉");
-                        document.getElementById("btn-check").classList.add("hidden");
-                        document.getElementById("btn-next").classList.remove("hidden");
-                    } else {
-                        alert("틀렸습니다. 다시 생각해 볼까요? 🤔\n" + Validator.lastError); // ⭐ 오류 메시지 추가
-                        
-                        document.getElementById("btn-check").disabled = false; 
-                        
-                        setTimeout(() => {
-                            FoldEngine.unfoldImmediate();
-                            
-                            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-                                Overlap.startSelection(currentProblem.net);
-                                UI.renderNet(currentProblem.net, {}); 
-                            } else {
-                                // loadProblem()을 호출하여 5조각 상태로 재설정
-                                loadProblem(); 
-                            }
-                        }, 1500); 
-                    }
-                })
+FoldEngine.unfoldImmediate();
+
+// 정답/오답 상관없이 접기 애니메이션 실행
+FoldEngine.foldAnimate(1.0)
+    .then(() => FoldEngine.showSolvedView(1.5))   // ← 추가된 부분
+    .then(() => {
+        if (correct) {
+            alert("정답입니다! 🎉");
+            document.getElementById("btn-check").classList.add("hidden");
+            document.getElementById("btn-next").classList.remove("hidden");
+        } else {
+            alert("틀렸습니다. 다시 생각해 볼까요? 🤔\n" + Validator.lastError);
+
+            document.getElementById("btn-check").disabled = false;
+
+            setTimeout(() => {
+                FoldEngine.unfoldImmediate();
+
+                if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                    Overlap.startSelection(currentProblem.net);
+                    UI.renderNet(currentProblem.net, {});
+                } else {
+                    loadProblem();
+                }
+            }, 1500);
+        }
+    });
+
                 .catch(err => {
                     console.error("Fold Animation Error:", err);
                     alert("정답 확인 중 오류가 발생했습니다.");

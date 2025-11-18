@@ -259,14 +259,27 @@
         </div>
     </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r100/three.min.js"></script>
+<!-- 1) THREE 먼저 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-<script src="js/cube_nets.js"></script>
-<script src="js/foldEngine.js"></script>
-<script src="js/validator.js"></script>
-<script src="js/overlap.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/main.js"></script>
+<!-- 2) net 데이터 -->
+<script src="./js/cube_nets.js"></script>
+
+<!-- 3) UI -->
+<script src="./js/ui.js"></script>
+
+<!-- 4) Validator -->
+<script src="./js/validator.js"></script>
+
+<!-- 5) Overlap -->
+<script src="./js/overlap.js"></script>
+
+<!-- 6) FoldEngine (UI보다 뒤, main보다 앞) -->
+<script src="./js/foldEngine.js"></script>
+
+<!-- 7) main (가장 마지막) -->
+<script src="./js/main.js"></script>
+
 
 
 </body>

@@ -1,7 +1,10 @@
 /**
- * foldEngine.js – 정육면체 전개도 전용 (6면, 1×1)
- * - 2D 전개도를 3D로 접는 애니메이션 담당
- * - 각 면을 서로 다른 색으로 표시
+ * foldEngine.js – 정육면체(6면, 1×1) 전개도 3D 접기 엔진
+ *
+ * - UI의 net.faces: { id, u, v, w, h } 사용 (w=h=1)
+ * - 전개도(2D) → 접기(3D) 애니메이션
+ * - 각 면 색 다르게, 내부 선 진하게
+ * - Overlap.js / Validator.js에서 3D 정보 읽을 수 있도록 getFaceGroups 제공
  */
 
 (function () {
@@ -23,13 +26,14 @@
 
     const EPS = 1e-6;
 
+    // 3D 면 색 팔레트 (더 진하게)
     const FACE_COLORS = [
-        0xffcdd2,
-        0xfff9c4,
-        0xc8e6c9,
-        0xbbdefb,
-        0xd1c4e9,
-        0xf8bbd0
+        0xff8a80, // 빨강 계열
+        0xffd54f, // 노랑 계열
+        0x81c784, // 초록 계열
+        0x64b5f6, // 파랑 계열
+        0xba68c8, // 보라 계열
+        0xf06292  // 분홍 계열
     ];
 
     FoldEngine.init = function (canvas) {
@@ -59,10 +63,11 @@
         );
         camera.position.set(0, 0, 8);
         camera.lookAt(0, 0, 0);
+        FoldEngine.camera = camera;
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(4, 5, 6);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+        const light = new THREE.DirectionalLight(0xffffff, 1.1);
+        light.position.set(5, 8, 6);
         scene.add(light);
 
         console.log("[FoldEngine.init] done");
@@ -81,13 +86,14 @@
         const edges = new THREE.EdgesGeometry(geom);
         const line = new THREE.LineSegments(
             edges,
-            new THREE.LineBasicMaterial({ color: 0x333333 })
+            new THREE.LineBasicMaterial({ color: 0x000000 })
         );
 
         g.add(mesh);
         g.add(line);
 
         g.userData.isCubeFace = true;
+
         return g;
     }
 
@@ -185,17 +191,74 @@
         console.log("[FoldEngine] cleared old faces");
     }
 
-    // hinge 정보
+    function layoutFlat2DIntoNodes() {
+        if (!facesSorted.length || !nodes.length) return;
+
+        const N = facesSorted.length;
+
+        const rootFace = facesSorted[0];
+        const rootCenterU = rootFace.u + rootFace.w / 2;
+        const rootCenterV = rootFace.v + rootFace.h / 2;
+
+        const rootX = rootCenterU - netCenter.x;
+        const rootY = -(rootCenterV - netCenter.y);
+
+        const worldPos = new Array(N);
+
+        worldPos[0] = new THREE.Vector3(rootX, rootY, 0);
+        nodes[0].position.copy(worldPos[0]);
+        nodes[0].quaternion.identity();
+        nodes[0].rotation.set(0, 0, 0);
+
+        const Q = [0];
+        while (Q.length) {
+            const p = Q.shift();
+            const parentFace = facesSorted[p];
+            const pCenterU = parentFace.u + parentFace.w / 2;
+            const pCenterV = parentFace.v + parentFace.h / 2;
+
+            for (let i = 0; i < N; i++) {
+                if (parentOf[i] === p) {
+                    const face = facesSorted[i];
+                    const cCenterU = face.u + face.w / 2;
+                    const cCenterV = face.v + face.h / 2;
+
+                    const dxNet = cCenterU - pCenterU;
+                    const dyNet = cCenterV - pCenterV;
+
+                    const dx = dxNet;
+                    const dy = -dyNet;
+
+                    worldPos[i] = new THREE.Vector3(
+                        worldPos[p].x + dx,
+                        worldPos[p].y + dy,
+                        0
+                    );
+
+                    nodes[i].position.copy(worldPos[i]);
+                    nodes[i].quaternion.identity();
+                    nodes[i].rotation.set(0, 0, 0);
+
+                    Q.push(i);
+                }
+            }
+        }
+
+        scene.updateMatrixWorld(true);
+    }
+
     let hingeInfo = [];
 
     function buildHingeInfo() {
         const N = facesSorted.length;
         hingeInfo = new Array(N).fill(null);
 
+        hingeInfo[0] = null;
+
         const corners = [
-            new THREE.Vector3(-0.5,  0.5, 0),
-            new THREE.Vector3( 0.5,  0.5, 0),
-            new THREE.Vector3( 0.5, -0.5, 0),
+            new THREE.Vector3(-0.5, 0.5, 0),
+            new THREE.Vector3(0.5, 0.5, 0),
+            new THREE.Vector3(0.5, -0.5, 0),
             new THREE.Vector3(-0.5, -0.5, 0)
         ];
 
@@ -207,7 +270,7 @@
             }
 
             const parentFace = facesSorted[parent];
-            const childFace  = facesSorted[i];
+            const childFace = facesSorted[i];
 
             const pCenterU = parentFace.u + parentFace.w / 2;
             const pCenterV = parentFace.v + parentFace.h / 2;
@@ -270,6 +333,7 @@
         const queue = [0];
         while (queue.length) {
             const p = queue.shift();
+
             for (let i = 0; i < N; i++) {
                 if (parentOf[i] === p) {
                     const info = hingeInfo[i];
@@ -288,6 +352,7 @@
                     const c_local_folded = info.A_local.clone().add(r0);
 
                     const childQ = parentQ.clone().multiply(q_local);
+
                     const c_world = c_local_folded.clone().applyQuaternion(parentQ).add(parentP);
 
                     Q_world[i] = childQ;
@@ -295,23 +360,6 @@
 
                     queue.push(i);
                 }
-            }
-        }
-
-        // 최종 각도(π/2)일 때 중심으로 한 번 더 정렬
-        if (Math.abs(angle - Math.PI / 2) < 1e-3) {
-            let cx = 0, cy = 0, cz = 0;
-            for (let i = 0; i < N; i++) {
-                cx += P_world[i].x;
-                cy += P_world[i].y;
-                cz += P_world[i].z;
-            }
-            cx /= N; cy /= N; cz /= N;
-
-            for (let i = 0; i < N; i++) {
-                P_world[i].x -= cx;
-                P_world[i].y -= cy;
-                P_world[i].z -= cz;
             }
         }
 
@@ -325,60 +373,7 @@
 
     FoldEngine.unfoldImmediate = function () {
         console.log("[FoldEngine.unfoldImmediate]");
-
-        const N = facesSorted.length;
-        if (!N || !nodes.length) return;
-
-        const rootFace = facesSorted[0];
-        const rootCenterU = rootFace.u + rootFace.w / 2;
-        const rootCenterV = rootFace.v + rootFace.h / 2;
-        const rootX = rootCenterU - netCenter.x;
-        const rootY = -(rootCenterV - netCenter.y);
-
-        const worldPos = new Array(N);
-        worldPos[0] = new THREE.Vector3(rootX, rootY, 0);
-        nodes[0].position.copy(worldPos[0]);
-        nodes[0].quaternion.identity();
-        nodes[0].rotation.set(0, 0, 0);
-
-        const Q = [0];
-        while (Q.length) {
-            const p = Q.shift();
-            const parentFace = facesSorted[p];
-
-            const parentCenterU = parentFace.u + parentFace.w / 2;
-            const parentCenterV = parentFace.v + parentFace.h / 2;
-
-            for (let i = 0; i < N; i++) {
-                if (parentOf[i] === p) {
-                    const face = facesSorted[i];
-
-                    const childCenterU = face.u + face.w / 2;
-                    const childCenterV = face.v + face.h / 2;
-
-                    const dxNet = childCenterU - parentCenterU;
-                    const dyNet = childCenterV - parentCenterV;
-
-                    const dx = dxNet;
-                    const dy = -dyNet;
-
-                    worldPos[i] = new THREE.Vector3(
-                        worldPos[p].x + dx,
-                        worldPos[p].y + dy,
-                        0
-                    );
-
-                    nodes[i].position.copy(worldPos[i]);
-                    nodes[i].quaternion.identity();
-                    nodes[i].rotation.set(0, 0, 0);
-
-                    Q.push(i);
-                }
-            }
-        }
-
-        scene.updateMatrixWorld(true);
-
+        layoutFlat2DIntoNodes();
         if (renderer && scene && camera) {
             renderer.render(scene, camera);
         }
@@ -391,6 +386,7 @@
             console.warn("[FoldEngine.loadNet] invalid net");
             return Promise.resolve();
         }
+
         if (!scene || !camera || !renderer) {
             console.warn("[FoldEngine.loadNet] init이 먼저 호출되지 않았습니다.");
             return Promise.resolve();
@@ -413,34 +409,30 @@
             g.userData.faceIndex = i;
             g.userData.faceId = facesSorted[i].id;
 
-            const mesh = g.children[0];
-            const color = FACE_COLORS[facesSorted[i].id % FACE_COLORS.length];
-            if (mesh && mesh.material) {
+            // 면 색 지정
+            const colorIdx = facesSorted[i].id % FACE_COLORS.length;
+            const color = FACE_COLORS[colorIdx];
+            const mesh = g.children.find(ch => ch.isMesh);
+            if (mesh) {
                 mesh.material.color.setHex(color);
+                mesh.material.transparent = false;
+                mesh.material.opacity = 1.0;
             }
 
             nodes.push(g);
             scene.add(g);
         }
 
-        FoldEngine.scene = scene;
-        FoldEngine.getFaceGroups = function () {
-            return nodes;
-        };
+        layoutFlat2DIntoNodes();
 
-        FoldEngine.unfoldImmediate();
+        if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+        }
 
         return Promise.resolve();
     };
 
-    // 각 면을 즉시 완전히 접기 (validator/Overlap용)
-    FoldEngine.foldToEndImmediate = function () {
-        if (!scene || !camera || !renderer) return;
-        applyFolding(Math.PI / 2);
-        renderer.render(scene, camera);
-    };
-
-    FoldEngine.foldAnimate = function (sec = 1.5) {  // ← 기본 1.5초
+    FoldEngine.foldAnimate = function (sec = 1.5) {
         console.log("[FoldEngine.foldAnimate] start, sec=", sec);
 
         if (!renderer || !scene || !camera) {
@@ -456,6 +448,7 @@
                 const angle = prog * (Math.PI / 2);
 
                 applyFolding(angle);
+
                 renderer.render(scene, camera);
 
                 if (prog < 1) {
@@ -505,6 +498,11 @@
 
             requestAnimationFrame(step);
         });
+    };
+
+    // Overlap / Validator용: 현재 face 그룹 반환
+    FoldEngine.getFaceGroups = function () {
+        return nodes ? nodes.slice() : [];
     };
 
 })();

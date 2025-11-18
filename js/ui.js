@@ -75,6 +75,7 @@
             computeCandidatePositions(currentNet);
         }
 
+        // placed는 중심 계산에서 제외 → 클릭해도 전개도 위치 안 바뀜
         calculateCenterOffset(currentNet, removedFaceId, isNetBuildMode);
         drawGrid();
 
@@ -96,7 +97,7 @@
             }
         }
 
-        // 2) 원래 전개도 면들
+        // 2) 원래 전개도 면들 (색 포함)
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
                 drawFace(f);
@@ -402,9 +403,9 @@
     function computePlacementByAttachment(parent, removed, eP) {
         let ru, rv;
         switch (eP) {
-            case 0: ru = parent.u;           rv = parent.v - removed.h; break; // 위
-            case 1: ru = parent.u + parent.w; rv = parent.v;             break; // 오른쪽
-            case 2: ru = parent.u;           rv = parent.v + parent.h; break; // 아래
+            case 0: ru = parent.u;             rv = parent.v - removed.h; break; // 위
+            case 1: ru = parent.u + parent.w;  rv = parent.v;             break; // 오른쪽
+            case 2: ru = parent.u;             rv = parent.v + parent.h;  break; // 아래
             case 3: ru = parent.u - removed.w; rv = parent.v;             break; // 왼쪽
             default: return null;
         }

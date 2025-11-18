@@ -174,13 +174,15 @@
         }
         
         const groups = engine.getFaceGroups();
-        if (groups.length !== 6) {
+        if (!groups || groups.length !== 6) {
              return fail("시뮬레이션 로드 실패: 6개의 면 그룹이 준비되지 않았습니다.");
         }
         
         // 2. Folding Tree 생성
         function buildTreeSim() {
             const parent = Array(adj.length).fill(null);
+
+            // faceGroups 중 첫 faceId 를 루트로 사용
             const rootId = groups[0].faceId; 
             parent[rootId] = -1;
 
@@ -192,7 +194,7 @@
                 order.push(f);
                 
                 if (adj[f]) {
-                     adj[f].forEach(n => {
+                    adj[f].forEach(n => {
                         if (parent[n.to] === null && groups.some(g => g.faceId === n.to)) { 
                             parent[n.to] = f;
                             Q.push(n.to);
@@ -222,7 +224,9 @@
         try {
             // 3. 동기 Fold 시뮬레이션: 초기화 (unfold)
             groups.forEach(group => {
-                group.position.copy(group.userData.initialPos);
+                if (group.userData && group.userData.initialPos) {
+                    group.position.copy(group.userData.initialPos);
+                }
                 group.rotation.set(0, 0, 0); 
                 group.updateMatrix(); 
             });
@@ -236,50 +240,64 @@
                 if (p === -1) return; 
 
                 const parentGroup = groups.find(g => g.faceId === p);
-                const childGroup = groups.find(g => g.faceId === faceId);
+                const childGroup  = groups.find(g => g.faceId === faceId);
                 
-                // 안정성 체크
-                if (!parentGroup || !childGroup) return; 
+                // 안정성 체크 (1): 그룹 존재 여부
+                if (!parentGroup || !childGroup) {
+                    console.warn("[FOLD WARN] parentGroup 또는 childGroup 누락", { faceId, p, parentGroup, childGroup });
+                    return; 
+                }
 
-                const relation = adj[p].find(x => x.to === faceId);
-                if (!relation) return;
+                const relation = adj[p] && adj[p].find(x => x.to === faceId);
+                if (!relation) {
+                    console.warn("[FOLD WARN] adjacency 에서 relation을 찾지 못했습니다.", { p, faceId, adjRow: adj[p] });
+                    return;
+                }
                 
                 const parentFaceObj = faces.find(f => f.id === p);
-                if (!parentFaceObj) return;
+                if (!parentFaceObj) {
+                    console.warn("[FOLD WARN] parentFaceObj 없음", { p, faces });
+                    return;
+                }
 
                 const { axis, point } = getAxisAndPointSim(parentFaceObj, relation);
                 
                 const worldPoint = point.clone().sub(centerOffsetSim); 
                 
-                
                 // --- 행렬 연산 구간 ---
-                
+
                 // 1. 로컬 행렬 업데이트
-                childGroup.updateMatrix(); 
                 parentGroup.updateMatrix(); 
+                childGroup.updateMatrix(); 
 
                 // 2. 월드 행렬 업데이트
                 parentGroup.updateMatrixWorld(true); 
                 childGroup.updateMatrixWorld(true); 
 
-                // 3. 역행렬 연산 (오류 발생 지점)
+                // 3. matrixWorld 방어 코드
                 if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
-                     console.warn(`MatrixWorld invalid for face ${faceId}. Skipping fold step.`);
-                     return; 
+                    console.warn(`[FOLD WARN] faceId ${faceId} 의 matrixWorld가 유효하지 않습니다.`, childGroup);
+                    return; 
                 }
 
-                const invMatrix = new THREE.Matrix4().getInverse(childGroup.matrixWorld); 
+                // 4. 안전한 역행렬 계산 (getInverse 대신 copy().invert 사용)
+                const invMatrix = new THREE.Matrix4();
+                invMatrix.copy(childGroup.matrixWorld).invert();
+
                 const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
 
+                // childGroup 좌표계 기준으로 pivot 보정
                 childGroup.position.sub(localPoint);
                 
-                const localAxis = axis.clone().transformDirection(childGroup.matrixWorld.getInverse());
+                // 5. 회전축을 local space로 변환 (matrixWorld.getInverse() 사용 제거)
+                const localAxis = axis.clone().applyMatrix4(invMatrix).normalize();
                 
                 childGroup.rotateOnAxis(localAxis, angle);
                 
+                // pivot 되돌리기
                 childGroup.position.add(localPoint);
+
                 childGroup.updateMatrix(); 
-                // --- 복제 끝 ---
             });
             
             engine.scene.updateMatrixWorld(true);

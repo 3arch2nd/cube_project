@@ -15,7 +15,9 @@
     let currentNet = null;
     let removedFaceId = null;
     let candidatePositions = [];     // {u,v, w, h} - 유효한 배치 위치
-    let placed = null;
+    
+    // ⭐ 수정: 내부 변수 대신 window.UI에 직접 연결하여 외부 접근 허용
+    UI.placed = null; 
 
     const UNIT = 60; // 한 칸 크기
     const EPS = 1e-6;
@@ -41,7 +43,10 @@
         currentNet = null;
         removedFaceId = null;
         candidatePositions = [];
-        placed = null;
+        
+        // ⭐ 수정: window.UI.placed 초기화
+        UI.placed = null; 
+        
         U_OFFSET = 0; // Offset 초기화
         V_OFFSET = 0;
     };
@@ -62,7 +67,7 @@
              computeCandidatePositions(currentNet); 
         }
         
-        calculateCenterOffset(currentNet, removedFaceId, placed, isNetBuildMode);
+        calculateCenterOffset(currentNet, removedFaceId, UI.placed, isNetBuildMode); // ⭐ UI.placed 사용
         drawGrid(); 
 
 
@@ -89,15 +94,13 @@
         // ② 제거된 face는 그리지 않는다, 남은 면은 밝은 색으로
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                // drawFace 호출 시 내부 선은 연하게, 외부 테두리는 진하게 그려진다.
-                // drawFace(f, "#eaeaea", "#333", "#aaa"); 
                 drawFace(f, "#eaeaea", "#333", "#aaa");   // 원래 면
             }
         }
 
         // ③ 사용자가 클릭하여 배치한 위치 (전개도 완성하기) - 두꺼운 테두리
-        if (placed) {
-            drawFaceOutline(placed, "#ffc107", 5); 
+        if (UI.placed) { // ⭐ UI.placed 사용
+            drawFaceOutline(UI.placed, "#ffc107", 5); 
         }
         
         // 캔버스 테두리 다시 그리기
@@ -468,7 +471,9 @@
                     
                     if (isPositionOccupied(pos)) return; 
                     
-                    placed = pos;
+                    // ⭐ 수정: UI.placed에 값을 할당
+                    UI.placed = pos;
+                    
                     UI.renderNet(currentNet, { removeOne: true, highlightPositions: true });
                     return;
                 }
@@ -488,38 +493,16 @@
     // --------------------------------------
     // 정답 판정 (validator 연결)
     // --------------------------------------
+    // ⭐ NOTE: main.js에서 placed를 가져가고 FoldEngine.loadNet을 호출하므로, 
+    // 이 함수는 단순히 Validator를 호출하도록 단순화됨.
     UI.checkPieceResult = function (net) {
-        if (!placed) {
-            Validator.lastError = "조각이 배치되지 않았습니다.";
-            return false;
+        // 이 함수는 main.js에서 netClone을 FoldEngine에 로드한 후 호출됩니다.
+        if (!net || net.faces.length !== 6) {
+             Validator.lastError = "검증을 위한 6조각 전개도가 준비되지 않았습니다.";
+             return false;
         }
 
-        const netClone = JSON.parse(JSON.stringify(net));
-        const f = netClone.faces.find(f => f.id === removedFaceId);
-        
-        // placed 위치를 복제본에 적용
-        if (f) {
-            f.u = placed.u;
-            f.v = placed.v;
-            f.w = placed.w; 
-            f.h = placed.h;
-        } else {
-             netClone.faces.push({
-                 id: removedFaceId,
-                 u: placed.u,
-                 v: placed.v,
-                 w: placed.w,
-                 h: placed.h
-             });
-             netClone.faces.sort((a,b) => a.id - b.id);
-        }
-        
-        // FoldEngine에 로드하기 전에, UI에서는 5조각만 보이다가
-        // 정답 확인 시 6조각 전체를 로드하여 검증한다.
-        window.FoldEngine.loadNet(netClone);
-
-        const result = Validator.validateNet(netClone);
-        
+        const result = Validator.validateNet(net);
         return result;
     };
 

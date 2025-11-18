@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – ⭐ BABYLON.js 최종 안정화 및 포팅 완료 버전 ⭐
+ * foldEngine.js – Babylon.js 최종 포팅 버전 (좌표계 반전 및 Z-Index 수정)
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -11,7 +11,7 @@
     window.FoldEngine = FoldEngine;
 
     // ------------------------------------------------------------
-    // BABYLON 기본 객체
+    // BABYLON 기본 객체 (THREE 대체)
     // ------------------------------------------------------------
     let scene = null;
     let camera = null;
@@ -29,7 +29,7 @@
     let hingeInfo = [];
     let netCenter = { x: 0, y: 0 };
 
-    let nodes = []; 
+    let nodes = []; // BABYLON.TransformNode (THREE.Group 대체)
 
     const EPS = 1e-6;
 
@@ -94,7 +94,7 @@
         scene = new BABYLON.Scene(engine);
         scene.clearColor = new BABYLON.Color4(1, 1, 1, 1); // 3D 배경 흰색
 
-        // ⭐ ArcRotateCamera 사용 (OrbitControls 대체)
+        // ⭐ 수정: 카메라 초기 시점 변경 (정면 뷰) 및 Near Plane 조정
         camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2, 8, BABYLON.Vector3.Zero(), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
         
@@ -103,9 +103,10 @@
         camera.inertia = 0.8; 
         camera.angularSensibilityX = 3000;
         camera.angularSensibilityY = 3000;
-        camera.minZ = 0.1; 
+        camera.minZ = 0.01; // Near Plane 조정 (Z-fighting 완화)
+        camera.maxZ = 1000; // Far Plane 조정
 
-        // 조명: HemisphericLight와 DirectionalLight 역할을 수행하도록 HemisphericLight를 추가
+        // 조명 추가
         new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
         new BABYLON.HemisphericLight("light2", new BABYLON.Vector3(0, -1, 0), scene);
         
@@ -125,17 +126,15 @@
     // 3D 단위 면 생성 (Babylon.js 대체 및 방향 수정)
     // --------------------------------------------------------------------
     function createUnitFace(faceId) {
-        // ⭐ BABYLON.MeshBuilder.CreatePlane을 사용하여 면 생성
+        // Plane 생성: 면이 XY평면에 놓임
         const plane = BABYLON.MeshBuilder.CreatePlane("face" + faceId, { width: 1, height: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
         
-        // ⭐ 재질 생성 및 할당
         plane.material = createFaceMaterial(scene, getFaceColorById(faceId));
         
-        // ⭐ BABYLON.TransformNode (THREE.Group 대체)
         const g = new BABYLON.TransformNode("group" + faceId, scene);
         plane.parent = g; 
         
-        // ⭐ 수정: Plane이 XY평면에 놓였을 때 Z축을 바라보도록 초기 회전 (이전 THREE.js 환경과 유사하게)
+        // Plane이 Z축을 바라보도록 초기 회전 (XY평면에서 XZ평면으로 90도 회전)
         plane.rotation.x = Math.PI / 2;
         
         plane.setPivotPoint(BABYLON.Vector3.Zero());
@@ -254,8 +253,8 @@
 
         const rootFace = facesSorted[0];
         const rootX = (rootFace.u + rootFace.w / 2) - netCenter.x;
-        // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
-        const rootY = ((rootFace.v + rootFace.h / 2) - netCenter.y); 
+        // ⭐ 수정: Y축 반전 문제 해결
+        const rootY = -((rootFace.v + rootFace.h / 2) - netCenter.y); 
 
         const worldPos = [];
         const worldRot = [];
@@ -284,8 +283,8 @@
                     const cCy = f.v + f.h / 2;
 
                     const dx = cCx - pCx;
-                    // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
-                    const dy = (cCy - pCy); 
+                    // ⭐ 수정: Y축 반전 문제 해결
+                    const dy = -(cCy - pCy); 
 
                     worldPos[i] = new BABYLON.Vector3( 
                         worldPos[p].x + dx,
@@ -340,8 +339,8 @@
             const pf = facesSorted[p];
 
             const dx = (f.u + f.w / 2) - (pf.u + pf.w / 2);
-            // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
-            const dy = (f.v + f.h / 2) - (pf.v + pf.h / 2); 
+            // ⭐ 수정: Y축 반전 문제 해결
+            const dy = -((f.v + f.h / 2) - (pf.v + pf.h / 2)); 
 
             hingeInfo[i] = {
                 parent: p,
@@ -365,8 +364,8 @@
 
         Pw[0] = new BABYLON.Vector3( 
             (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x,
-            // ⭐ 수정: Y축 반전 문제를 해결하기 위해 부호 제거
-            ((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
+            // ⭐ 수정: Y축 반전 문제 해결
+            -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
             0
         );
         Qw[0] = new BABYLON.Quaternion(); 
@@ -390,12 +389,12 @@
                     );
                     
                     let r0 = info.childCenter_local.clone().subtract(info.A_local);
-                    // ⭐ 수정: Vector3의 회전은 matrix를 통해 적용
+                    // ⭐ Vector3 회전에 Matrix 사용
                     r0 = BABYLON.Vector3.TransformCoordinates(r0, BABYLON.Matrix.FromQuaternion(qLocal)); 
 
                     const cLocal = info.A_local.clone().add(r0);
                     
-                    // ⭐ 수정: cWorld 계산도 matrix를 통해 적용
+                    // ⭐ cWorld 계산에 Matrix Compose 사용
                     const cWorld = BABYLON.Vector3.TransformCoordinates(cLocal, BABYLON.Matrix.Compose(
                         BABYLON.Vector3.One(), parentQ, BABYLON.Vector3.Zero()
                     )).add(parentP);

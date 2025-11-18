@@ -1,9 +1,6 @@
 /**
- * validator.js – 정육면체 + 직육면체 전개도 검증 확장
- * * 제공 기능:
- * validateNet(net)
- * → true / false
- * → 오류 메시지는 validateNet.lastError 로 확인
+ * validator.js – 정육면체 전개도 검증
+ *  - 정답 기준: CubeNets에 등록된 11개 전개도와 같은 모양인지
  */
 
 (function () {
@@ -15,85 +12,74 @@
     Validator.lastError = "";
     const EPS = 1e-6;
 
-    // ----------------------------------------------------
-    // 간편 오류 처리
-    // ----------------------------------------------------
     function fail(msg) {
         Validator.lastError = msg;
         return false;
     }
 
-    // ----------------------------------------------------
-    // 면의 4개 edge의 좌표 (정사각형이 아닌 w,h 반영)
-    // ----------------------------------------------------
-    function getEdges(f) {
-        const { u, v, w, h } = f;
-
-        return [
-            { a:[u, v],       b:[u+w, v]       },   // top
-            { a:[u+w, v],     b:[u+w, v+h]     },   // right
-            { a:[u+w, v+h],   b:[u, v+h]       },   // bottom
-            { a:[u, v+h],     b:[u, v]         }    // left
-        ];
-    }
-    
-    // edge 길이 (투명성: 전개도 좌표에서는 w/h 그대로길이)
-    function edgeLength(edge) {
-        const [x1, y1] = edge.a;
-        const [x2, y2] = edge.b;
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        return Math.sqrt(dx*dx + dy*dy);
-    }
-
-    function sameEdge(e1, e2) {
-        return (
-            Math.abs(e1.a[0] - e2.b[0]) < EPS &&
-            Math.abs(e1.a[1] - e2.b[1]) < EPS &&
-            Math.abs(e1.b[0] - e2.a[0]) < EPS &&
-            Math.abs(e1.b[1] - e2.a[1]) < EPS
-        );
-    }
-
-    function validateFaces(net) {
+    function validateFacesBasic(net) {
         if (!net || !Array.isArray(net.faces)) {
             return fail("전개도 데이터가 올바르지 않습니다.");
         }
 
-        const validFaces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
-
-        if (validFaces.length !== 6) {
-            return fail(`전개도는 반드시 6개의 면으로 구성되어야 합니다. 현재 유효 면 개수: ${validFaces.length}`);
+        if (net.faces.length !== 6) {
+            return fail(`전개도는 반드시 6개의 정사각형(면)으로 이루어져야 합니다. (현재: ${net.faces.length}개)`);
         }
-        
+
         const idSet = new Set();
-        for (const f of validFaces) {
-            if (typeof f.id !== 'number') return fail("면 id가 숫자가 아닙니다.");
-            if (idSet.has(f.id)) return fail("중복된 face id가 있습니다: " + f.id);
+        for (const f of net.faces) {
+            if (typeof f.id !== 'number') {
+                return fail("face id가 숫자가 아닙니다.");
+            }
+            if (idSet.has(f.id)) {
+                return fail("중복된 face id가 있습니다: " + f.id);
+            }
             idSet.add(f.id);
 
-            if (f.w <= 0 || f.h <= 0) {
-                return fail("면의 가로/세로 크기가 잘못되었습니다.");
+            if (f.w !== 1 || f.h !== 1) {
+                return fail("정육면체 전개도의 각 면은 1×1 정사각형이어야 합니다.");
             }
         }
-
         return true;
     }
 
-    function buildAdjacency(net) {
-        const faces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
-        const maxId = faces.reduce((max, f) => Math.max(max, f.id), -1);
+    function validateAdjacencyAndConnectivity(net) {
+        const faces = net.faces;
+        const maxId = faces.reduce((m, f) => Math.max(m, f.id), -1);
         const adj = [...Array(maxId + 1)].map(() => []);
-        
-        if (faces.length !== 6) {
-             return fail(`adjacency 검사 실패: 면 개수 ${faces.length}`);
+
+        function getEdges(f) {
+            const { u, v, w, h } = f;
+            return [
+                { a: [u, v],     b: [u + w, v] },
+                { a: [u + w, v], b: [u + w, v + h] },
+                { a: [u + w, v + h], b: [u, v + h] },
+                { a: [u, v + h], b: [u, v] }
+            ];
+        }
+
+        function edgeLength(edge) {
+            const [x1, y1] = edge.a;
+            const [x2, y2] = edge.b;
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function sameEdge(e1, e2) {
+            return (
+                Math.abs(e1.a[0] - e2.b[0]) < EPS &&
+                Math.abs(e1.a[1] - e2.b[1]) < EPS &&
+                Math.abs(e1.b[0] - e2.a[0]) < EPS &&
+                Math.abs(e1.b[1] - e2.a[1]) < EPS
+            );
         }
 
         for (let i = 0; i < faces.length; i++) {
             const fi = faces[i];
             const Ei = getEdges(fi);
 
-            for (let j = i+1; j < faces.length; j++) {
+            for (let j = i + 1; j < faces.length; j++) {
                 const fj = faces[j];
                 const Ej = getEdges(fj);
 
@@ -103,8 +89,8 @@
                             if (Math.abs(edgeLength(Ei[ei]) - edgeLength(Ej[ej])) > EPS) {
                                 return fail("두 면의 접촉 edge 길이가 일치하지 않습니다.");
                             }
-                            adj[fi.id].push({ to: fj.id, edgeA: ei, edgeB: ej });
-                            adj[fj.id].push({ to: fi.id, edgeA: ej, edgeB: ei });
+                            adj[fi.id].push({ to: fj.id });
+                            adj[fj.id].push({ to: fi.id });
                         }
                     }
                 }
@@ -114,237 +100,62 @@
         let totalConnections = 0;
         adj.forEach(a => totalConnections += a.length);
         totalConnections = totalConnections / 2;
-
         if (totalConnections !== 5) {
-            return fail(`전개도 면들이 정확히 5개 연결(edge sharing)되어야 합니다. 현재: ${totalConnections}`);
+            return fail(`면들은 정확히 5개의 변에서 서로 이어져야 합니다. (현재 연결 수: ${totalConnections})`);
         }
 
-        return adj;
-    }
+        // 연결 그래프인지 체크
+        const ids = faces.map(f => f.id);
+        const visited = {};
+        ids.forEach(id => visited[id] = false);
 
-    function checkConnectivity(adj) {
-        const facesIds = adj.map((a, id) => (Array.isArray(a) && a.length > 0) ? id : -1).filter(id => id !== -1);
-        if (facesIds.length !== 6) return true;
+        const start = ids[0];
+        const queue = [start];
+        visited[start] = true;
 
-        const visited = Array(adj.length).fill(false);
-        const Q = [facesIds[0]];
-        visited[facesIds[0]] = true;
-
-        while (Q.length) {
-            const f = Q.shift();
+        while (queue.length) {
+            const f = queue.shift();
             adj[f].forEach(n => {
-                if (n.to < visited.length && !visited[n.to]) {
+                if (!visited[n.to]) {
                     visited[n.to] = true;
-                    Q.push(n.to);
+                    queue.push(n.to);
                 }
             });
         }
 
-        if (facesIds.some(id => !visited[id])) {
-            return fail("전개도 면들이 하나로 연결되지 않았습니다.");
+        for (const id of ids) {
+            if (!visited[id]) {
+                return fail("전개도 면들이 하나로 연결되어 있지 않습니다.");
+            }
         }
 
         return true;
     }
 
-    // [포함된 헬퍼 함수] edgeIndex에 따른 회전축 계산 및 로컬 변환 (시뮬레이션용)
-    function getAxisAndPointSim(parentFace, relation) {
-        const parentEdges = getEdges(parentFace);
-        const edge = parentEdges[relation.edgeA];
-        
-        const p1_world = new THREE.Vector3(edge.a[0], -edge.a[1], 0);
-        const p2_world = new THREE.Vector3(edge.b[0], -edge.b[1], 0);
-        
-        const axis = new THREE.Vector3().subVectors(p2_world, p1_world).normalize();
-        const point = p1_world; 
-
-        return { axis, point };
-    }
-
-
-    // ----------------------------------------------------
-    // (C) FoldEngine 기반 실제 fold 테스트
-    // ----------------------------------------------------
-    function simulateFolding(net, adj) {
-
-    const engine = window.FoldEngine;
-    if (!engine.getFaceGroups || !engine.scene) {
-        return fail("FoldEngine 모듈이 올바르게 로드되지 않았습니다.");
-    }
-
-    const groups = engine.getFaceGroups();
-    if (!groups || groups.length !== 6) {
-        return fail("시뮬레이션 로드 실패: 6개의 면 그룹이 준비되지 않았습니다.");
-    }
-
-    // --- Folding Tree 만들기
-    function buildTreeSim() {
-        const parent = Array(adj.length).fill(null);
-        const rootId = groups[0].faceId;
-        parent[rootId] = -1;
-
-        const order = [];
-        const Q = [rootId];
-
-        while (Q.length) {
-            const f = Q.shift();
-            order.push(f);
-
-            if (adj[f]) {
-                adj[f].forEach(n => {
-                    if (parent[n.to] === null && groups.some(g => g.faceId === n.to)) {
-                        parent[n.to] = f;
-                        Q.push(n.to);
-                    }
-                });
-            }
-        }
-        return { parent, order };
-    }
-
-    const { parent, order } = buildTreeSim();
-    const faces = net.faces.filter(f => f && f.w > 0 && f.h > 0);
-
-    // --- centerOffset 계산
-    let minU = Infinity, maxU = -Infinity;
-    let minV = Infinity, maxV = -Infinity;
-    for (const f of faces) {
-        minU = Math.min(minU, f.u);
-        maxU = Math.max(maxU, f.u + f.w);
-        minV = Math.min(minV, f.v);
-        maxV = Math.max(maxV, f.v + f.h);
-    }
-    const netCenterU = (minU + maxU) / 2;
-    const netCenterV = (minV + maxV) / 2;
-    const centerOffsetSim = new THREE.Vector3(netCenterU, -netCenterV, 0);
-
-    try {
-
-        // 초기화
-        groups.forEach(group => {
-            if (group.userData && group.userData.initialPos) {
-                group.position.copy(group.userData.initialPos);
-            }
-            group.rotation.set(0, 0, 0);
-            group.updateMatrix();
-        });
-
-        engine.scene.updateMatrixWorld(true);
-
-        const angle = Math.PI / 2;
-
-        order.forEach(faceId => {
-            const p = parent[faceId];
-            if (p === -1) return;
-
-            const parentGroup = groups.find(g => g.faceId === p);
-            const childGroup = groups.find(g => g.faceId === faceId);
-            if (!parentGroup || !childGroup) {
-                console.warn("[WARN] Missing group", { faceId, p });
-                return;
-            }
-
-            const relation = adj[p] && adj[p].find(x => x.to === faceId);
-            if (!relation) {
-                console.warn("[WARN] Missing relation", { p, faceId });
-                return;
-            }
-
-            const parentFaceObj = faces.find(f => f.id === p);
-            if (!parentFaceObj) {
-                console.warn("[WARN] Missing parentFaceObj", { p });
-                return;
-            }
-
-            const { axis, point } = getAxisAndPointSim(parentFaceObj, relation);
-            const worldPoint = point.clone().sub(centerOffsetSim);
-
-            parentGroup.updateMatrix();
-            childGroup.updateMatrix();
-
-            parentGroup.updateMatrixWorld(true);
-            childGroup.updateMatrixWorld(true);
-
-            // ------- matrixWorld 안전 검사 -------
-            if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
-                console.warn(`[WARN] Invalid matrixWorld for face ${faceId}`);
-                return;
-            }
-
-            // ------- 안전한 inverse 계산 (구버전 전용) -------
-            const invMatrix = new THREE.Matrix4();
-            invMatrix.getInverse(childGroup.matrixWorld);
-
-            const localPoint = worldPoint.clone().applyMatrix4(invMatrix);
-
-            childGroup.position.sub(localPoint);
-
-            // childGroup.matrixWorld.getInverse() 대신 안전하게 inverse 적용
-            const localAxis = axis.clone().applyMatrix4(invMatrix).normalize();
-
-            childGroup.rotateOnAxis(localAxis, angle);
-
-            childGroup.position.add(localPoint);
-            childGroup.updateMatrix();
-
-        });
-
-        engine.scene.updateMatrixWorld(true);
-
-    } catch (err) {
-        console.warn("Validator Simulate Fold Error:", err);
-        return fail(`접기 시뮬레이션 중 오류: ${err.message}`);
-    }
-
-    for (let g of groups) {
-        const p = g.position;
-        if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.z)) {
-            return fail("면의 folding 위치가 비정상적(NaN/Infinity)입니다.");
-        }
-    }
-
-    return true;
-}
-
-
-    // ----------------------------------------------------
-    // (D) overlap 검사
-    // ----------------------------------------------------
-    function checkOverlap() {
-        if (!window.Overlap || !window.Overlap.noOverlapCheck) {
-            console.warn("Overlap 모듈 없음 → 겹침 검사 생략");
-            return true;
+    function validateShapeByLibrary(net) {
+        if (!window.CubeNets || !Array.isArray(window.CubeNets.nets)) {
+            return fail("CubeNets 데이터가 로드되지 않았습니다.");
         }
 
-        const scene = window.FoldEngine.scene;
-        if (scene) scene.updateMatrixWorld(true);
+        const clone = window.CubeNets.cloneNet(net);
+        const key = window.CubeNets.normalizeNet(clone);
 
-        const ok = window.Overlap.noOverlapCheck();
+        const ok = window.CubeNets.nets.some(base => base.normalizeKey === key);
         if (!ok) {
-            return fail("접었을 때 면이 서로 겹칩니다.");
+            return fail("이 전개도는 준비된 정육면체 전개도 11개 중 어떤 것과도 같은 모양이 아닙니다.");
         }
+
         return true;
     }
 
-    // ----------------------------------------------------
-    // 최종 공개 함수: validateNet
-    // ----------------------------------------------------
     Validator.validateNet = function (net) {
         Validator.lastError = "";
 
-        if (!validateFaces(net)) return false;
-
-        const adj = buildAdjacency(net);
-        if (!adj) return false;
-
-        if (!checkConnectivity(adj)) return false;
-
-        if (!simulateFolding(net, adj)) return false;
-
-        if (!checkOverlap()) return false;
+        if (!validateFacesBasic(net)) return false;
+        if (!validateAdjacencyAndConnectivity(net)) return false;
+        if (!validateShapeByLibrary(net)) return false;
 
         return true;
     };
-
 
 })();

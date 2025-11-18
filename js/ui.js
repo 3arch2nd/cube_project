@@ -1,5 +1,8 @@
 /**
- * ui.js – 정육면체 전개도 전용 (색깔 면 + 후보 위치 + 겹침 선택 표시)
+ * ui.js – 전개도(2D) 렌더링 & 클릭 처리
+ * - 정육면체 전용 (faces: w=h=1)
+ * - 각 면/조각 색 다르게
+ * - 오답일 때 배치한 조각에 굵은 빗금 표시
  */
 
 (function () {
@@ -13,24 +16,25 @@
 
     let currentNet = null;
     let removedFaceId = null;
-    let candidatePositions = [];
-
-    UI.placed = null;
+    let candidatePositions = [];   // {u,v,w,h}
+    UI.placed = null;              // 사용자가 놓은 조각 위치
+    UI.isWrong = false;            // 오답 시 true
 
     const UNIT = 60;
     const EPS = 1e-6;
+
+    // 전개도 색 팔레트 (face id 기준)
+    const FACE_COLORS = [
+        "#ffcccc", // 연한 빨강
+        "#ffe6a3", // 연한 노랑
+        "#c8f7c5", // 연한 초록
+        "#c3e6ff", // 연한 파랑
+        "#e1c6ff", // 연한 보라
+        "#ffcce6"  // 연한 분홍
+    ];
+
     let U_OFFSET = 0;
     let V_OFFSET = 0;
-
-    // 연한 빨/노/초/파/보/분홍
-    const FACE_COLORS = [
-        "#ffcdd2", // red
-        "#fff9c4", // yellow
-        "#c8e6c9", // green
-        "#bbdefb", // blue
-        "#d1c4e9", // violet
-        "#f8bbd0"  // pink
-    ];
 
     UI.init = function (canvasElement) {
         canvas = canvasElement;
@@ -47,14 +51,15 @@
         removedFaceId = null;
         candidatePositions = [];
         UI.placed = null;
+        UI.isWrong = false;
         U_OFFSET = 0;
         V_OFFSET = 0;
     };
 
     UI.renderNet = function (net, options = {}) {
         if (!ctx || !canvas) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         currentNet = JSON.parse(JSON.stringify(net));
 
         const isNetBuildMode =
@@ -70,6 +75,7 @@
         calculateCenterOffset(currentNet, removedFaceId, UI.placed, isNetBuildMode);
         drawGrid();
 
+        // 겹침 찾기 모드: 선택 하이라이트
         if (!isNetBuildMode) {
             if (window.Overlap && window.Overlap.getSelections) {
                 const { first, second } = window.Overlap.getSelections();
@@ -78,6 +84,7 @@
             }
         }
 
+        // ① 후보 위치
         if (isNetBuildMode && options.highlightPositions) {
             for (const c of candidatePositions) {
                 if (!isPositionOccupied(c)) {
@@ -86,17 +93,25 @@
             }
         }
 
+        // ② 실제 전개도 면
         for (const f of currentNet.faces) {
             if (f.id !== removedFaceId) {
-                const color = FACE_COLORS[f.id % FACE_COLORS.length];
-                drawFace(f, color, "#333", "#aaa");
+                const col = FACE_COLORS[f.id % FACE_COLORS.length];
+                drawFace(f, col, "#333", "#bbb");
             }
         }
 
+        // ③ 사용자가 놓은 조각
         if (UI.placed) {
-            drawFaceOutline(UI.placed, "#ff9800", 4, "rgba(255,152,0,0.1)");
+            drawFaceOutline(UI.placed, "#ff9800", 4, "rgba(255, 232, 180, 0.6)");
         }
 
+        // ④ 오답: 배치 조각에 진한 빗금
+        if (UI.isWrong && UI.placed && options.markWrong) {
+            drawHatchetFace(UI.placed, "#d32f2f", 3);
+        }
+
+        // 캔버스 테두리
         ctx.strokeStyle = "#333";
         ctx.lineWidth = 2;
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
@@ -148,7 +163,7 @@
         const maxCells = Math.floor(canvas.width / UNIT) + 1;
 
         ctx.save();
-        ctx.strokeStyle = "#ddd";
+        ctx.strokeStyle = "#eee";
         ctx.lineWidth = 1;
 
         for (let i = 0; i < maxCells; i++) {
@@ -226,8 +241,8 @@
         ctx.restore();
     }
 
-    // (옵션) 빗금 표시용 헬퍼 – 필요 시 validator에서 사용 가능
-    function drawHatchedFace(f, strokeColor = "#f44336") {
+    // 굵은 빗금(대각선) 렌더
+    function drawHatchetFace(f, color = "#d32f2f", lineWidth = 3) {
         const x = (f.u + U_OFFSET) * UNIT;
         const y = (f.v + V_OFFSET) * UNIT;
         const w = f.w * UNIT;
@@ -238,14 +253,14 @@
         ctx.rect(x, y, w, h);
         ctx.clip();
 
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
 
         const step = 10;
-        for (let sx = x - h; sx < x + w + h; sx += step) {
+        for (let i = -h; i < w + h; i += step) {
             ctx.beginPath();
-            ctx.moveTo(sx, y + h);
-            ctx.lineTo(sx + h, y);
+            ctx.moveTo(x + i, y);
+            ctx.lineTo(x + i - h, y + h);
             ctx.stroke();
         }
 
@@ -261,10 +276,7 @@
         ctx.lineWidth = 5;
 
         const face = currentNet.faces.find(f => f.id === elem.face);
-        if (!face) {
-            ctx.restore();
-            return;
-        }
+        if (!face) return;
 
         if (elem.type === "vertex") {
             const x = (elem.x + U_OFFSET) * UNIT;
@@ -326,12 +338,14 @@
     }
 
     function getEdges(f) {
-        if (!f || f.w === undefined || f.h === undefined) return [];
+        if (!f || f.w === undefined || f.h === undefined) {
+            return [];
+        }
         return [
-            { a: [f.u, f.v], b: [f.u + f.w, f.v] },
-            { a: [f.u + f.w, f.v], b: [f.u + f.w, f.v + f.h] },
-            { a: [f.u + f.w, f.v + f.h], b: [f.u, f.v + f.h] },
-            { a: [f.u, f.v + f.h], b: [f.u, f.v] }
+            { a: [f.u, f.v], b: [f.u + f.w, f.v] },             // top
+            { a: [f.u + f.w, f.v], b: [f.u + f.w, f.v + f.h] }, // right
+            { a: [f.u + f.w, f.v + f.h], b: [f.u, f.v + f.h] }, // bottom
+            { a: [f.u, f.v + f.h], b: [f.u, f.v] }              // left
         ];
     }
 
@@ -365,18 +379,20 @@
 
             for (let eP = 0; eP < 4; eP++) {
                 for (let eR = 0; eR < 4; eR++) {
+
                     const p_edge_len = edgeLength(edgesF[eP]);
                     const r_edge_len = edgeLength(getEdges(removedFace)[eR]);
 
                     if (Math.abs(p_edge_len - r_edge_len) > EPS) continue;
 
                     const pos = computePlacementByAttachment(parent, removedFace, eP, eR);
-                    if (!pos) continue;
 
-                    const isDuplicate = candidatePositions.some(c =>
-                        Math.abs(c.u - pos.u) < EPS && Math.abs(c.v - pos.v) < EPS
-                    );
-                    if (!isDuplicate) candidatePositions.push(pos);
+                    if (pos) {
+                        const isDuplicate = candidatePositions.some(c =>
+                            Math.abs(c.u - pos.u) < EPS && Math.abs(c.v - pos.v) < EPS
+                        );
+                        if (!isDuplicate) candidatePositions.push(pos);
+                    }
                 }
             }
         }
@@ -384,6 +400,7 @@
 
     function computePlacementByAttachment(parent, removed, eP, eR) {
         let ru, rv;
+
         switch (eP) {
             case 0: ru = parent.u; rv = parent.v - removed.h; break;
             case 1: ru = parent.u + parent.w; rv = parent.v; break;
@@ -391,7 +408,13 @@
             case 3: ru = parent.u - removed.w; rv = parent.v; break;
             default: return null;
         }
-        return { u: ru, v: rv, w: removed.w, h: removed.h };
+
+        return {
+            u: ru,
+            v: rv,
+            w: removed.w,
+            h: removed.h
+        };
     }
 
     function isPositionOccupied(pos) {
@@ -421,8 +444,13 @@
 
         if (!currentNet || !window.CubeProject || !window.CubeProject.currentProblem) return;
 
-        if (window.CubeProject.currentProblem.mode === window.CubeProject.MAIN_MODE.NET_BUILD) {
+        const mode = window.CubeProject.currentProblem.mode;
+
+        // 전개도 완성하기
+        if (mode === window.CubeProject.MAIN_MODE.NET_BUILD) {
             if (removedFaceId == null) return;
+
+            UI.isWrong = false; // 새로 클릭하면 오답표시 제거
 
             for (const pos of candidatePositions) {
                 if (u >= pos.u && u < pos.u + pos.w && v >= pos.v && v < pos.v + pos.h) {
@@ -433,7 +461,9 @@
                     return;
                 }
             }
-        } else if (window.CubeProject.currentProblem.mode === window.CubeProject.MAIN_MODE.OVERLAP_FIND) {
+        }
+        // 겹침 찾기 모드
+        else if (mode === window.CubeProject.MAIN_MODE.OVERLAP_FIND) {
             const result = window.Overlap.recordClick(u, v);
             if (result) {
                 UI.renderNet(currentNet, {});
@@ -442,12 +472,14 @@
         }
     }
 
+    // 정답 판정은 main.js에서 Validator 사용
     UI.checkPieceResult = function (net) {
         if (!net || net.faces.length !== 6) {
-            Validator.lastError = "검증을 위한 6조각 전개도가 준비되지 않았습니다.";
+            Validator.lastError = "전개도가 6개의 면으로 이루어져야 합니다.";
             return false;
         }
-        return Validator.validateNet(net);
+        const result = Validator.validateNet(net);
+        return result;
     };
 
     UI.checkOverlapResult = function (net) {

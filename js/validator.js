@@ -263,7 +263,6 @@
                 childGroup.updateMatrixWorld(true); 
 
                 // 3. 역행렬 연산 (오류 발생 지점)
-                // 비동기 대기 후에도 유효하지 않다면 Three.js 내부 문제이므로 방어 코드 유지
                 if (!childGroup.matrixWorld || !childGroup.matrixWorld.elements) {
                      console.warn(`MatrixWorld invalid for face ${faceId}. Skipping fold step.`);
                      return; 

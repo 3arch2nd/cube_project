@@ -20,7 +20,6 @@
     // OrbitControls
     let controls = null;
     let animationStarted = false;
-    // let isAutoCameraMoving = false; // ❌ 삭제
 
     // ------------------------------------------------------------
     // 전개도 데이터
@@ -604,22 +603,36 @@
 // --------------------------------------------------------------------
     // PUBLIC: showSolvedView – 자동 회전 기능 제거, OrbitControls 즉시 활성화 보장
     // --------------------------------------------------------------------
-    FoldEngine.showSolvedView = function () {
+    FoldEngine.showSolvedView = function (sec = 1.0) { // ⭐ 1.0초 동안 카메라 이동
         return new Promise(resolve => {
-            // OrbitControls 복구 및 타겟 재설정
-            if (controls) {
-                controls.enabled = true; // 터치/마우스 회전 가능하도록 설정
-
-                // ⭐ 핵심 수정 1: 큐브가 사라지는 현상 방지. 카메라 위치를 강제 재설정
-                camera.position.set(0, 0, 8);
-                camera.lookAt(0, 0, 0);
-
-                controls.target.set(0, 0, 0);
-                controls.update(); // 1차 업데이트: Target 반영
+            
+            // ⭐ 핵심 수정 1: 카메라 위치와 시점을 목표 위치로 보간
+            const startPosition = camera.position.clone();
+            const endPosition = new THREE.Vector3(0, 0, 8); // 최종 위치: 정면, 거리 8
+            const start = performance.now();
+            
+            function step(t) {
+                const prog = Math.min(1, (t - start) / (sec * 1000));
                 
-                controls.update(); // 2차 업데이트: 변경된 Target을 렌더링에 완전히 적용
+                // A 지점에서 B 지점으로 부드럽게 이동
+                camera.position.lerpVectors(startPosition, endPosition, prog);
+                camera.lookAt(0, 0, 0); // 항상 큐브 중앙을 바라보게 함
+                
+                if (prog < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    // Controls 활성화 및 타겟 고정
+                    if (controls) {
+                        controls.enabled = true; // 터치/마우스 회전 가능
+                        controls.target.set(0, 0, 0);
+                        controls.update();
+                        controls.update(); // 더블 업데이트로 확실히 상태 반영
+                    }
+                    resolve();
+                }
             }
-            resolve();
+
+            requestAnimationFrame(step);
         });
     };
 

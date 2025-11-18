@@ -336,9 +336,8 @@
             // 3D 모델을 펼친 상태에서 접는 애니메이션 실행
 FoldEngine.unfoldImmediate();
 
-// 정답/오답 상관없이 접기 애니메이션 실행
 FoldEngine.foldAnimate(1.0)
-    .then(() => FoldEngine.showSolvedView(1.5))   // ← 추가된 부분
+    .then(() => FoldEngine.showSolvedView(1.5))
     .then(() => {
         if (correct) {
             alert("정답입니다! 🎉");
@@ -360,14 +359,13 @@ FoldEngine.foldAnimate(1.0)
                 }
             }, 1500);
         }
+    })
+    .catch(err => {
+        console.error("Fold Animation Error:", err);
+        alert("정답 확인 중 오류가 발생했습니다.");
+        document.getElementById("btn-check").disabled = false;
     });
 
-                .catch(err => {
-                    console.error("Fold Animation Error:", err);
-                    alert("정답 확인 중 오류가 발생했습니다.");
-                    document.getElementById("btn-check").disabled = false;
-                });
-        });
 
         document.getElementById("btn-next").addEventListener("click", () => {
             currentIndex++;

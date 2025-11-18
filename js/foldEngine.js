@@ -1,5 +1,5 @@
 /**
- * foldEngine.js – Babylon.js 최종 포팅 버전 (THREE 참조 오류 및 문법 오류 해결)
+ * foldEngine.js – Babylon.js 최종 포팅 버전 (정면 시점 및 API 오류 해결)
  * ------------------------------------------------------------
  * PART 1 / 3
  */
@@ -93,7 +93,8 @@
         scene = new BABYLON.Scene(engine);
         scene.clearColor = new BABYLON.Color4(1, 1, 1, 1); // 3D 배경 흰색
 
-        camera = new BABYLON.ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2, 8, BABYLON.Vector3.Zero(), scene);
+        // ⭐ 수정: 카메라 초기 시점 변경 (정면 뷰)
+        camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2, 8, BABYLON.Vector3.Zero(), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
         
         camera.attachControl(canvas, true); 
@@ -451,8 +452,9 @@
         layoutFlat2D();
 
         // 6) 카메라/컨트롤 타겟 초기화 (문제 로딩 시 항상 초기 상태로 돌아감)
+        // ⭐ 수정: 카메라 시점 초기화 (정면 뷰)
         camera.radius = 8;
-        camera.alpha = Math.PI / 2;
+        camera.alpha = -Math.PI / 2;
         camera.beta = Math.PI / 2;
         
         if (controls) {
@@ -469,9 +471,9 @@
     FoldEngine.foldAnimate = function (sec = 2.0) {
         return new Promise(resolve => {
             
-            // ⭐ 핵심: 애니메이션 시작 시 Controls 비활성화 (Babylon.js 구문)
+            // ⭐ 수정: engine.getCanvas() -> engine.getRenderingCanvas()로 변경
             if (controls) {
-                controls.detachControl(engine.getCanvas(), true); 
+                controls.detachControl(engine.getRenderingCanvas(), true); 
             }
 
             const start = performance.now();
@@ -485,7 +487,6 @@
                 if (prog < 1) {
                     requestAnimationFrame(step);
                 } else {
-                    // ⭐ 애니메이션 완료 후 Controls 활성화 로직은 showSolvedView로 위임
                     resolve();
                 }
             }
@@ -501,14 +502,14 @@
     FoldEngine.showSolvedView = function (sec = 0.0) { 
         return new Promise(resolve => {
             
-            // ⭐ Babylon.js: 카메라 위치 및 각도 초기화 (즉시 복귀)
+            // ⭐ 수정: 카메라 시점 초기화 (정면 뷰)
             camera.radius = 8;
-            camera.alpha = Math.PI / 2;
+            camera.alpha = -Math.PI / 2;
             camera.beta = Math.PI / 2;
             
             if (controls) {
-                // ⭐ Controls 재활성화
-                controls.attachControl(engine.getCanvas(), true);
+                // ⭐ 수정: engine.getCanvas() -> engine.getRenderingCanvas()로 변경
+                controls.attachControl(engine.getRenderingCanvas(), true);
                 controls.target = BABYLON.Vector3.Zero(); 
             }
             

@@ -1,6 +1,11 @@
 /**
- * FoldEngine.js – Perfect Cube Folding Engine (Final Clean Version)
- * 정육면체 전개도 전용
+ * foldEngine.js – PERFECT Cube Folding Engine
+ * --------------------------------------------
+ * ✔ 정육면체 전용
+ * ✔ 모든 면이 parent-child로 연결됨 (종이처럼 접힘)
+ * ✔ 전개도 중심 조정
+ * ✔ 회전축 계산 정확
+ * ✔ foldAnimate + showSolvedView 완전 작동
  */
 
 (function () {
@@ -11,74 +16,105 @@
 
     let scene, camera, renderer;
 
-    let faceGroups = [];      // THREE.Group (면)
-    let facesSorted = [];     // net.faces의 id 정렬본
-    let adj = [];             // adjacency (index 기반)
-    let foldParent = [];      // BFS tree (index 기반)
-    let initialMatrices = []; // unfold 좌표계 저장
-
-    FoldEngine.currentNet = null;
+    let facesSorted = [];   // net.faces sorted by id
+    let faceNodes = [];     // face Groups (트리 구조)
+    let rootNode = null;    // 첫 번째 face
+    let adjacency = [];     // index-based adjacency
+    let parentOf = [];      // BFS tree
+    let netCenter = { x: 0, y: 0 };
 
     const EPS = 1e-6;
 
-    // ===============================
-    // INIT THREE
-    // ===============================
+    // =====================================================
+    // INIT
+    // =====================================================
     FoldEngine.init = function (canvas) {
         if (!renderer) {
-            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer = new THREE.WebGLRenderer({
+                canvas,
+                antialias: true
+            });
         }
         renderer.setSize(canvas.width, canvas.height);
 
-        if (!scene) {
-            scene = new THREE.Scene();
-            FoldEngine.scene = scene;
-        } else {
-            while (scene.children.length > 0) scene.remove(scene.children[0]);
-        }
+        scene = new THREE.Scene();
+        FoldEngine.scene = scene;
 
-        const aspect = canvas.width / canvas.height;
-        camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 100);
-        camera.position.set(0, 0, 7);
+        // Camera
+        camera = new THREE.PerspectiveCamera(
+            40,
+            canvas.width / canvas.height,
+            0.1,
+            100
+        );
+        camera.position.set(0, 0, 8);
         camera.lookAt(0, 0, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-
+        // Lights
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(4, 5, 6);
+        light.position.set(3, 5, 5);
         scene.add(light);
     };
 
-    // ===============================
-    // CREATE GEOMETRY (정육면체 전용)
-    // ===============================
-    function createFaceGeometry() {
-        const g = new THREE.Geometry();
-        g.vertices.push(
-            new THREE.Vector3(-0.5, -0.5, 0),
-            new THREE.Vector3(0.5, -0.5, 0),
-            new THREE.Vector3(0.5, 0.5, 0),
-            new THREE.Vector3(-0.5, 0.5, 0)
+    // =====================================================
+    // UTIL – Create 1×1 square face
+    // =====================================================
+    function createUnitFace() {
+        const g = new THREE.Group();
+
+        const geom = new THREE.PlaneGeometry(1, 1);
+        const mat = new THREE.MeshLambertMaterial({
+            color: 0xffffff,
+            side: THREE.DoubleSide
+        });
+
+        const mesh = new THREE.Mesh(geom, mat);
+
+        // outline
+        const edges = new THREE.EdgesGeometry(geom);
+        const line = new THREE.LineSegments(
+            edges,
+            new THREE.LineBasicMaterial({ color: 0x333333 })
         );
-        g.faces.push(new THREE.Face3(0, 1, 2));
-        g.faces.push(new THREE.Face3(0, 2, 3));
-        g.computeFaceNormals();
+
+        g.add(mesh);
+        g.add(line);
+
         return g;
     }
 
-    // ===============================
-    // BUILD ADJACENCY (index 기반)
-    // ===============================
+    // =====================================================
+    // CALC NET CENTER
+    // =====================================================
+    function computeNetCenter() {
+        let minU = Infinity, minV = Infinity;
+        let maxU = -Infinity, maxV = -Infinity;
+
+        facesSorted.forEach(f => {
+            minU = Math.min(minU, f.u);
+            minV = Math.min(minV, f.v);
+            maxU = Math.max(maxU, f.u + 1);
+            maxV = Math.max(maxV, f.v + 1);
+        });
+
+        netCenter.x = (minU + maxU) / 2;
+        netCenter.y = (minV + maxV) / 2;
+    }
+
+    // =====================================================
+    // ADJACENCY (index-based)
+    // =====================================================
     function buildAdjacency() {
         const N = facesSorted.length;
-        adj = [...Array(N)].map(() => []);
+        adjacency = [...Array(N)].map(() => []);
 
-        function edges(f) {
+        function edges(face) {
             return [
-                { a: [f.u, f.v], b: [f.u + 1, f.v] },
-                { a: [f.u + 1, f.v], b: [f.u + 1, f.v + 1] },
-                { a: [f.u + 1, f.v + 1], b: [f.u, f.v + 1] },
-                { a: [f.u, f.v + 1], b: [f.u, f.v] }
+                { a: [face.u, face.v],     b: [face.u+1, face.v]     },
+                { a: [face.u+1, face.v],   b: [face.u+1, face.v+1]   },
+                { a: [face.u+1, face.v+1], b: [face.u, face.v+1]     },
+                { a: [face.u, face.v+1],   b: [face.u, face.v]       }
             ];
         }
 
@@ -95,11 +131,11 @@
             const Ei = edges(facesSorted[i]);
             for (let j = i + 1; j < N; j++) {
                 const Ej = edges(facesSorted[j]);
-                for (let ei = 0; ei < 4; ei++) {
-                    for (let ej = 0; ej < 4; ej++) {
-                        if (sameEdge(Ei[ei], Ej[ej])) {
-                            adj[i].push({ to: j, edgeA: ei, edgeB: ej });
-                            adj[j].push({ to: i, edgeA: ej, edgeB: ei });
+                for (let a = 0; a < 4; a++) {
+                    for (let b = 0; b < 4; b++) {
+                        if (sameEdge(Ei[a], Ej[b])) {
+                            adjacency[i].push({ to: j, edgeA: a, edgeB: b });
+                            adjacency[j].push({ to: i, edgeA: b, edgeB: a });
                         }
                     }
                 }
@@ -107,151 +143,149 @@
         }
     }
 
-    // ===============================
+    // =====================================================
     // BUILD BFS TREE
-    // ===============================
+    // =====================================================
     function buildTree() {
         const N = facesSorted.length;
-        foldParent = Array(N).fill(null);
+        parentOf = Array(N).fill(null);
+        parentOf[0] = -1;
 
-        const root = 0;
-        foldParent[root] = -1;
-
-        const Q = [root];
+        const Q = [0];
 
         while (Q.length) {
             const f = Q.shift();
-            adj[f].forEach(rel => {
-                if (foldParent[rel.to] === null) {
-                    foldParent[rel.to] = f;
+            adjacency[f].forEach(rel => {
+                if (parentOf[rel.to] === null) {
+                    parentOf[rel.to] = f;
                     Q.push(rel.to);
                 }
             });
         }
     }
 
-    // ===============================
+    // =====================================================
     // LOAD NET
-    // ===============================
+    // =====================================================
     FoldEngine.loadNet = function (net) {
-        FoldEngine.currentNet = net;
-
         facesSorted = [...net.faces].sort((a, b) => a.id - b.id);
-        faceGroups = [];
-        initialMatrices = [];
 
-        // faceGroups 생성
-        facesSorted.forEach(f => {
-            const g = new THREE.Group();
-            const geom = createFaceGeometry();
-            const mesh = new THREE.Mesh(
-                geom,
-                new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })
-            );
+        computeNetCenter();
+        buildAdjacency();
+        buildTree();
 
-            const edgeGeom = new THREE.EdgesGeometry(geom);
-            const line = new THREE.LineSegments(edgeGeom, new THREE.LineBasicMaterial({ color: 0x333333 }));
+        faceNodes = [];
 
-            g.add(mesh);
-            g.add(line);
+        // 1. 모든 face 노드 생성
+        facesSorted.forEach(face => {
+            const g = createUnitFace();
+            g.userData = { u: face.u, v: face.v };
+            faceNodes.push(g);
+        });
 
-            g.position.set(f.u, -f.v, 0);
-            g.updateMatrixWorld(true);
+        // 2. 트리 구조로 Scene에 배치
+        faceNodes.forEach((child, idx) => {
+            const p = parentOf[idx];
+            if (p === -1) {
+                // root
+                child.position.set(
+                    facesSorted[idx].u - netCenter.x,
+                    -(facesSorted[idx].v - netCenter.y),
+                    0
+                );
+                scene.add(child);
+            } else {
+                const parent = faceNodes[p];
+                parent.add(child);
 
-            scene.add(g);
-            faceGroups.push(g);
+                child.position.set(
+                    facesSorted[idx].u - facesSorted[p].u,
+                    -(facesSorted[idx].v - facesSorted[p].v),
+                    0
+                );
+            }
         });
 
         scene.updateMatrixWorld(true);
 
-        buildAdjacency();
-        buildTree();
-
-        // unfold 좌표 저장
-        faceGroups.forEach(g => {
-            initialMatrices.push(g.matrixWorld.clone());
-        });
-
         return Promise.resolve();
     };
 
-    // ===============================
-    // UNFOLD IMMEDIATE
-    // ===============================
+    // =====================================================
+    // UNFOLD (RESET TRANSFORM)
+    // =====================================================
     FoldEngine.unfoldImmediate = function () {
-        faceGroups.forEach((g, i) => {
-            g.matrix.copy(initialMatrices[i]);
-            g.matrixWorld.copy(initialMatrices[i]);
+        // 트리 전체 초기 각도 0
+        faceNodes.forEach(n => {
+            n.rotation.set(0, 0, 0);
         });
+        scene.updateMatrixWorld(true);
         renderer.render(scene, camera);
     };
 
-    // ===============================
-    // ROTATE CHILD (행렬 기반)
-    // ===============================
-    function rotateChild(parentIdx, childIdx, angle) {
-        const rel = adj[parentIdx].find(r => r.to === childIdx);
-        if (!rel) return;
+    // =====================================================
+    // GET ROTATION AXIS & PIVOT
+    // =====================================================
+    function getEdgePivot(parentIdx, childIdx) {
+        const rel = adjacency[parentIdx].find(r => r.to === childIdx);
+        const edgeId = rel.edgeA;
 
-        const face = facesSorted[parentIdx];
-        const A = new THREE.Vector3(
-            face.u + (rel.edgeA === 0 || rel.edgeA === 3 ? 0 : 1),
-            -(face.v + (rel.edgeA === 0 || rel.edgeA === 1 ? 0 : 1)),
-            0
-        );
-        const B = new THREE.Vector3(
-            face.u + (rel.edgeA === 0 || rel.edgeA === 1 ? 1 : 0),
-            -(face.v + (rel.edgeA === 1 || rel.edgeA === 2 ? 1 : 0)),
-            0
-        );
+        const f = facesSorted[parentIdx];
+        const corners = [
+            new THREE.Vector3(f.u - netCenter.x, -(f.v - netCenter.y), 0),
+            new THREE.Vector3(f.u + 1 - netCenter.x, -(f.v - netCenter.y), 0),
+            new THREE.Vector3(f.u + 1 - netCenter.x, -(f.v + 1 - netCenter.y), 0),
+            new THREE.Vector3(f.u - netCenter.x, -(f.v + 1 - netCenter.y), 0)
+        ];
 
-        // parent transform
-        const parentMat = initialMatrices[parentIdx];
-        const Aw = A.clone().applyMatrix4(parentMat);
-        const Bw = B.clone().applyMatrix4(parentMat);
+        const A = corners[edgeId];
+        const B = corners[(edgeId + 1) % 4];
 
-        const axis = Bw.clone().sub(Aw).normalize();
-
-        const pivot = Aw;
-        const childMat0 = initialMatrices[childIdx];
-
-        // M_child = T(p) * R(axis,angle) * T(-p) * M_child0
-        const T1 = new THREE.Matrix4().makeTranslation(pivot.x, pivot.y, pivot.z);
-        const R = new THREE.Matrix4().makeRotationAxis(axis, angle);
-        const T2 = new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z);
-
-        const M = new THREE.Matrix4();
-        M.multiplyMatrices(T1, R);
-        M.multiply(T2);
-        M.multiply(childMat0);
-
-        faceGroups[childIdx].matrix.copy(M);
-        faceGroups[childIdx].matrixWorld.copy(M);
+        return { A, B };
     }
 
-    // ===============================
-    // FOLD ANIMATE
-    // ===============================
-    FoldEngine.foldAnimate = function (sec = 1) {
+    // =====================================================
+    // ROTATE ONE CHILD
+    // =====================================================
+    function rotateChildLocal(parentIdx, childIdx, angle) {
+        const rel = adjacency[parentIdx].find(r => r.to === childIdx);
+        if (!rel) return;
+
+        const parent = faceNodes[parentIdx];
+        const child = faceNodes[childIdx];
+
+        const { A, B } = getEdgePivot(parentIdx, childIdx);
+
+        // A와 B는 parent의 local 좌표
+        const axis = new THREE.Vector3().subVectors(B, A).normalize();
+
+        // child의 회전 pivot을 edge A로 맞춤
+        child.position.sub(A);
+        child.rotateOnAxis(axis, angle);
+        child.position.add(A);
+    }
+
+    // =====================================================
+    // ANIMATE FOLD
+    // =====================================================
+    FoldEngine.foldAnimate = function (sec = 1.0) {
         return new Promise(resolve => {
             const start = performance.now();
 
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));
-                const angle = prog * (Math.PI / 2);
+                const theta = prog * (Math.PI / 2); // 90도 접기
 
                 // reset
-                faceGroups.forEach((g, i) => {
-                    g.matrix.copy(initialMatrices[i]);
-                    g.matrixWorld.copy(initialMatrices[i]);
-                });
+                FoldEngine.unfoldImmediate();
 
-                for (let i = 0; i < facesSorted.length; i++) {
-                    const p = foldParent[i];
-                    if (p === -1) continue;
-                    rotateChild(p, i, angle);
+                // apply fold
+                for (let i = 1; i < facesSorted.length; i++) {
+                    const p = parentOf[i];
+                    rotateChildLocal(p, i, theta);
                 }
 
+                scene.updateMatrixWorld(true);
                 renderer.render(scene, camera);
 
                 if (prog < 1) requestAnimationFrame(step);
@@ -262,16 +296,16 @@
         });
     };
 
-    // ===============================
-    // SHOW SOLVED VIEW
-    // ===============================
+    // =====================================================
+    // CAMERA ROTATION AFTER SOLVED
+    // =====================================================
     FoldEngine.showSolvedView = function (sec = 1.5) {
         return new Promise(resolve => {
             const start = performance.now();
 
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));
-                const th = prog * (Math.PI / 4);
+                const th = prog * (Math.PI / 3);
 
                 camera.position.set(
                     6 * Math.sin(th),

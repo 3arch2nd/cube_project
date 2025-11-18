@@ -342,7 +342,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 			//
 
-			if ( lastPosition.distanceSq( scope.object.position ) > EPS ||
+			if ( lastPosition.distanceTo( scope.object.position ) * lastPosition.distanceTo( scope.object.position ) > EPS || // ✨ 수정 1: distanceSq 대신 distanceTo 제곱 사용
 				 lastQuaternion.angleTo( scope.object.quaternion ) > EPS ||
 				 zoomChanged ) {
 
@@ -759,8 +759,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 	window.addEventListener( 'keydown', onKeyDown, false );
 
 	// force an update at start
-
-	this.update();
+	// this.update(); // ❌ 수정 2: 초기화 시점의 오류를 방지하기 위해 이 줄을 삭제합니다. (FoldEngine에서 호출)
 
 };
 

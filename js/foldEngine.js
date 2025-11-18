@@ -1,15 +1,7 @@
 /**
- * foldEngine.js – 최신 안정 버전 + 반투명 + OrbitControls
- * 정육면체 전개도 → 3D 접기 / 검증용 엔진
+ * foldEngine.js – 최신 안정 버전 + 반투명 + OrbitControls + 빗금(///)
  * ------------------------------------------------------------
- * UI.js / validator.js 와 완전 호환 버전
- *
- * ⚙ 추가사항
- *  - 3D 면 재질을 약간 반투명(opacity 0.75)으로 변경
- *  - OrbitControls로 마우스 드래그 회전 가능
- *    · 중심(0,0,0) 고정
- *    · enableDamping = true, enablePan = false
- *    · 자동 회전(showSolvedView) 중에는 컨트롤 잠시 정지 후, 끝나면 다시 활성
+ * PART 1 / 3
  */
 
 (function () {
@@ -28,32 +20,64 @@
     // OrbitControls
     let controls = null;
     let animationStarted = false;
-    let isAutoCameraMoving = false;   // showSolvedView 동안 true
+    let isAutoCameraMoving = false;
 
     // ------------------------------------------------------------
     // 전개도 데이터
     // ------------------------------------------------------------
-    let facesSorted = [];     // id 순 정렬된 faces
-    let adjacency = [];       // face 인접 정보
-    let parentOf = [];        // BFS parent
-    let hingeInfo = [];       // parent-child 힌지 정보
+    let facesSorted = [];
+    let adjacency = [];
+    let parentOf = [];
+    let hingeInfo = [];
     let netCenter = { x: 0, y: 0 };
 
-    let nodes = [];           // THREE.Group (각 면)
+    let nodes = [];  // THREE.Group (각 면)
 
     const EPS = 1e-6;
 
     // ------------------------------------------------------------
-    // 색상 (진하게)
+    // 색상 (선명)
     // ------------------------------------------------------------
     const FACE_COLORS = [
-        0xff4d4d,  // 빨
-        0xffd43b,  // 노
-        0x51cf66,  // 초
-        0x339af0,  // 파
-        0x845ef7,  // 보
-        0xf06595   // 분홍
+        0xff4d4d,
+        0xffd43b,
+        0x51cf66,
+        0x339af0,
+        0x845ef7,
+        0xf06595
     ];
+
+    // ------------------------------------------------------------
+    // CanvasTexture 기반 빗금 패턴 생성
+    // ------------------------------------------------------------
+    function createHatchTexture() {
+        const size = 128;
+        const cvs = document.createElement("canvas");
+        cvs.width = size;
+        cvs.height = size;
+
+        const c = cvs.getContext("2d");
+        c.strokeStyle = "rgba(0,0,0,0.95)";
+        c.lineWidth = 8;
+
+        c.beginPath();
+        c.moveTo(-20, 20);
+        c.lineTo(150, 190);
+        c.stroke();
+
+        c.beginPath();
+        c.moveTo(-20, -40);
+        c.lineTo(150, 120);
+        c.stroke();
+
+        const tex = new THREE.CanvasTexture(cvs);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1.5, 1.5);
+
+        return tex;
+    }
+
+    const HATCH_TEXTURE = createHatchTexture();
 
     // ------------------------------------------------------------
     // 외부에서 필요로 하는 getter
@@ -61,10 +85,11 @@
     FoldEngine.getFaceGroups = function () {
         return nodes;
     };
-    FoldEngine.scene = scene; // validator / overlap 용
+
+    FoldEngine.scene = scene;  // validator 용
 
     // ------------------------------------------------------------
-    // 내부: 공통 렌더 루프 시작
+    // 공통 렌더 루프
     // ------------------------------------------------------------
     function startBaseLoop() {
         if (animationStarted || !renderer || !scene || !camera) return;
@@ -73,14 +98,12 @@
         function loop() {
             requestAnimationFrame(loop);
 
-            // 자동 카메라 이동 중에는 OrbitControls update 중지
             if (controls && !isAutoCameraMoving) {
                 controls.update();
             }
 
             renderer.render(scene, camera);
         }
-
         requestAnimationFrame(loop);
     }
 
@@ -99,7 +122,10 @@
                 antialias: true
             });
         }
+
         renderer.setSize(canvas.width, canvas.height);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0xffffff, 1);   // ★★★ 3D 배경 흰색
 
         scene = new THREE.Scene();
         FoldEngine.scene = scene;
@@ -115,52 +141,70 @@
 
         const amb = new THREE.AmbientLight(0xffffff, 0.9);
         scene.add(amb);
+
         const dir = new THREE.DirectionalLight(0xffffff, 1);
         dir.position.set(4, 5, 6);
         scene.add(dir);
 
-        // OrbitControls 세팅 (전역 THREE.OrbitControls가 있다고 가정)
+        // --------------------------------------------------------
+        // OrbitControls 활성화
+        // --------------------------------------------------------
         if (window.THREE && THREE.OrbitControls) {
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.08;
-            controls.enablePan = false;          // 패닝 비활성화
-            controls.target.set(0, 0, 0);        // 중심 고정
+            controls.enablePan = false;
+            controls.target.set(0, 0, 0);
             controls.update();
         } else {
-            controls = null; // 없으면 그냥 컨트롤 없이 렌더만
+            controls = null;
         }
 
-        // 공통 렌더 루프 시작
         startBaseLoop();
     };
 
-
     // --------------------------------------------------------------------
-    // 유틸: face 색 가져오기
+    // 색상 유틸
     // --------------------------------------------------------------------
     function getFaceColorById(id) {
         return FACE_COLORS[id % FACE_COLORS.length];
     }
 
     // --------------------------------------------------------------------
-    // 3D face 생성 (반투명 재질)
+    // 겹침 빗금 재질 만들기
+    // --------------------------------------------------------------------
+    function createHatchMaterial() {
+        return new THREE.MeshBasicMaterial({
+            map: HATCH_TEXTURE,
+            transparent: true,
+            opacity: 0.85,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+    }
+
+    // --------------------------------------------------------------------
+    // 3D 단위 면 생성 (반투명 + 테두리 + 빗금 레이어 포함)
     // --------------------------------------------------------------------
     function createUnitFace(faceId) {
         const g = new THREE.Group();
 
+        // 본체 면
         const geom = new THREE.PlaneGeometry(1, 1);
         const mat = new THREE.MeshLambertMaterial({
             color: getFaceColorById(faceId),
             side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.75,         // 살짝 비치는 정도
-            depthWrite: true,
-            depthTest: true
+            opacity: 0.78
         });
         const mesh = new THREE.Mesh(geom, mat);
 
-        // 선명한 테두리
+        // 빗금 오버레이 (기본은 숨김)
+        const hatchMesh = new THREE.Mesh(geom, createHatchMaterial());
+        hatchMesh.visible = false;   // ★ 기본 숨김
+        mesh.userData.hatch = hatchMesh;
+
+        // 테두리
         const edges = new THREE.EdgesGeometry(geom);
         const edgeLine = new THREE.LineSegments(
             edges,
@@ -171,14 +215,18 @@
         );
 
         g.add(mesh);
+        g.add(hatchMesh);
         g.add(edgeLine);
 
-        g.userData.isCubeFace = true;
         g.userData.faceId = faceId;
+        g.userData.isCubeFace = true;
 
         return g;
     }
 
+})();
+
+// PART 2 / 3 --------------------------------------------------------------
 
     // --------------------------------------------------------------------
     // NET CENTER 계산
@@ -243,7 +291,7 @@
 
 
     // --------------------------------------------------------------------
-    // BFS parent 트리 구성
+    // BFS 트리 구성 (parentOf)
     // --------------------------------------------------------------------
     function buildTree() {
         const N = facesSorted.length;
@@ -266,7 +314,7 @@
 
 
     // --------------------------------------------------------------------
-    // 이전 faces 제거
+    // 기존 3D 면 제거
     // --------------------------------------------------------------------
     function clearOldFacesFromScene() {
         nodes.forEach(g => {
@@ -277,7 +325,7 @@
 
 
     // --------------------------------------------------------------------
-    // 2D 평면 배치
+    // 2D 평면 배치 (unfoldImmediate)
     // --------------------------------------------------------------------
     function layoutFlat2D() {
         const N = facesSorted.length;
@@ -296,7 +344,9 @@
         nodes[0].position.copy(worldPos[0]);
         nodes[0].quaternion.copy(worldRot[0]);
 
+        // BFS 배치
         const Q = [0];
+
         while (Q.length) {
             const p = Q.shift();
             const pFace = facesSorted[p];
@@ -307,10 +357,11 @@
             for (let i = 0; i < N; i++) {
                 if (parentOf[i] === p) {
                     const f = facesSorted[i];
+
                     const cCx = f.u + f.w / 2;
                     const cCy = f.v + f.h / 2;
 
-                    const dx = (cCx - pCx);
+                    const dx = cCx - pCx;
                     const dy = -(cCy - pCy);
 
                     worldPos[i] = new THREE.Vector3(
@@ -366,13 +417,8 @@
             const f  = facesSorted[i];
             const pf = facesSorted[p];
 
-            const pCx = pf.u + pf.w / 2;
-            const pCy = pf.v + pf.h / 2;
-            const cCx = f.u + f.w / 2;
-            const cCy = f.v + f.h / 2;
-
-            const dx = (cCx - pCx);
-            const dy = -(cCy - pCy);
+            const dx = (f.u + f.w / 2) - (pf.u + pf.w / 2);
+            const dy = -((f.v + f.h / 2) - (pf.v + pf.h / 2));
 
             hingeInfo[i] = {
                 parent: p,
@@ -385,13 +431,15 @@
 
 
     // --------------------------------------------------------------------
-    // 특정 angle로 접기 적용 (즉시 반영)
+    // 접힘 계산 applyFolding(angle)
     // --------------------------------------------------------------------
     function applyFolding(angle) {
         const N = facesSorted.length;
         if (!N) return;
 
-        const Qw = [], Pw = [];
+        const Qw = [];
+        const Pw = [];
+
         Pw[0] = new THREE.Vector3(
             (facesSorted[0].u + facesSorted[0].w / 2) - netCenter.x,
             -((facesSorted[0].v + facesSorted[0].h / 2) - netCenter.y),
@@ -399,9 +447,10 @@
         );
         Qw[0] = new THREE.Quaternion();
 
-        const q = [0];
-        while (q.length) {
-            const p = q.shift();
+        const Q = [0];
+
+        while (Q.length) {
+            const p = Q.shift();
 
             for (let i = 0; i < N; i++) {
                 if (parentOf[i] === p) {
@@ -416,19 +465,20 @@
 
                     const r0 = info.childCenter_local.clone().sub(info.A_local);
                     r0.applyQuaternion(qLocal);
-                    const cLocal = info.A_local.clone().add(r0);
 
+                    const cLocal = info.A_local.clone().add(r0);
                     const cWorld =
                         cLocal.clone().applyQuaternion(parentQ).add(parentP);
 
                     Pw[i] = cWorld;
                     Qw[i] = parentQ.clone().multiply(qLocal);
 
-                    q.push(i);
+                    Q.push(i);
                 }
             }
         }
 
+        // 위치/회전 적용
         for (let i = 0; i < N; i++) {
             nodes[i].position.copy(Pw[i]);
             nodes[i].quaternion.copy(Qw[i]);
@@ -438,12 +488,19 @@
     }
 
 
+// PART 3 / 3 --------------------------------------------------------------
+
+
     // --------------------------------------------------------------------
     // PUBLIC: 펼쳐진 상태로 즉시 적용
     // --------------------------------------------------------------------
     FoldEngine.unfoldImmediate = function () {
         layoutFlat2D();
-        // 렌더는 공통 루프에서 수행
+        // 렌더는 공통 루프에서 자동 수행
+        if (controls) {
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
     };
 
 
@@ -460,6 +517,7 @@
             return Promise.resolve();
         }
 
+        // 1) 전개도 데이터 준비
         facesSorted = [...net.faces].slice().sort((a, b) => a.id - b.id);
 
         computeNetCenter();
@@ -467,8 +525,10 @@
         buildTree();
         buildHingeInfo();
 
+        // 2) 이전 면들 제거
         clearOldFacesFromScene();
 
+        // 3) 새 면들 생성
         nodes = [];
         facesSorted.forEach(face => {
             const g = createUnitFace(face.id);
@@ -476,15 +536,37 @@
             scene.add(g);
         });
 
+        // 4) (있다면) 이전 빗금 그룹 제거 후 새로 생성
+        if (typeof createHatchMeshForFace === "function") {
+            if (window.__cubeHatchGroup && window.__cubeHatchGroup.parent) {
+                window.__cubeHatchGroup.parent.remove(window.__cubeHatchGroup);
+            }
+            const hatchGroup = new THREE.Group();
+            nodes.forEach(faceGroup => {
+                const h = createHatchMeshForFace(faceGroup);
+                if (h) hatchGroup.add(h);
+            });
+            scene.add(hatchGroup);
+            window.__cubeHatchGroup = hatchGroup;
+        }
+
+        // 5) 평면 상태로 배치
         layoutFlat2D();
-        // 렌더는 공통 루프에서 수행
+
+        // 6) 카메라/컨트롤 타겟 초기화
+        camera.position.set(0, 0, 10);
+        camera.lookAt(0, 0, 0);
+        if (controls) {
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
 
         return Promise.resolve();
     };
 
 
     // --------------------------------------------------------------------
-    // PUBLIC: foldAnimate – 학생용 애니메이션
+    // PUBLIC: foldAnimate – 학생용 접기 애니메이션
     // --------------------------------------------------------------------
     FoldEngine.foldAnimate = function (sec = 1.5) {
         return new Promise(resolve => {
@@ -492,10 +574,10 @@
 
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));
-                const angle = prog * (Math.PI / 2);
+                const angle = prog * (Math.PI / 2); // 0 → 90도
 
                 applyFolding(angle);
-                // 렌더는 공통 루프에서 수행
+                // 렌더링은 공통 루프에서 자동 진행
 
                 if (prog < 1) {
                     requestAnimationFrame(step);
@@ -510,34 +592,40 @@
 
 
     // --------------------------------------------------------------------
-    // PUBLIC: showSolvedView – 카메라 자연 회전
+    // PUBLIC: showSolvedView – 카메라 자연 회전 + 끝나면 다시 OrbitControls
     // --------------------------------------------------------------------
     FoldEngine.showSolvedView = function (sec = 1.5) {
         return new Promise(resolve => {
             const start = performance.now();
             isAutoCameraMoving = true;
 
+            // 자동 회전 동안에는 컨트롤을 잠시 비활성화
+            const oldControlsEnabled = controls ? controls.enabled : true;
+            if (controls) controls.enabled = false;
+
             function step(t) {
                 const prog = Math.min(1, (t - start) / (sec * 1000));
 
                 const r = 8;
-                const theta = prog * (Math.PI * 0.5);
+                const theta = prog * (Math.PI * 0.5); // 0 → 90도 정도 회전
 
                 camera.position.set(
                     r * Math.sin(theta),
                     3,
                     r * Math.cos(theta)
                 );
-
                 camera.lookAt(0, 0, 0);
-                // 렌더는 공통 루프에서 수행
+
+                // 렌더는 공통 루프에서 진행
 
                 if (prog < 1) {
                     requestAnimationFrame(step);
                 } else {
-                    // 자동 회전 종료 → OrbitControls 다시 활성
                     isAutoCameraMoving = false;
+
+                    // 컨트롤 복구 + 타겟 재설정
                     if (controls) {
+                        controls.enabled = oldControlsEnabled;
                         controls.target.set(0, 0, 0);
                         controls.update();
                     }
@@ -551,11 +639,12 @@
 
 
     // --------------------------------------------------------------------
-    // PUBLIC: foldStaticTo (validator 전용)
+    // PUBLIC: foldStaticTo (validator 전용 – 즉시 특정 각도로 접기)
     // --------------------------------------------------------------------
     FoldEngine.foldStaticTo = function (angleRad) {
         applyFolding(angleRad);
-        // 렌더는 공통 루프에서 수행
+        // 렌더링은 공통 루프에서 자동 처리
     };
 
-})();
+
+})(); 

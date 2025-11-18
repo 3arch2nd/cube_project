@@ -20,6 +20,7 @@
     // OrbitControls
     let controls = null;
     let animationStarted = false;
+    // let isAutoCameraMoving = false; // ❌ 삭제
 
     // ------------------------------------------------------------
     // 전개도 데이터
@@ -561,12 +562,11 @@
         layoutFlat2D();
 
         // 6) 카메라/컨트롤 타겟 초기화 (문제 로딩 시 항상 초기 상태로 돌아감)
-        camera.position.set(0, 0, 8); // ⭐ 카메라 거리를 0, 0, 8로 재설정 (위에서 보는 시점)
+        camera.position.set(0, 0, 8); // ⭐ 카메라 위치를 0, 0, 8로 재설정 (위에서 보는 시점)
         camera.lookAt(0, 0, 0);
         
         if (controls) {
-            // ⭐ OrbitControls의 내부 회전 상태를 완전히 초기화 (다음 문제 시작 시 필수)
-            controls.reset(); 
+            controls.reset(); // ⭐ OrbitControls의 내부 회전 상태를 완전히 초기화
             controls.target.set(0, 0, 0);
             controls.update();
         }
@@ -609,10 +609,14 @@
             // OrbitControls 복구 및 타겟 재설정
             if (controls) {
                 controls.enabled = true; // 터치/마우스 회전 가능하도록 설정
+
+                // ⭐ 핵심 수정 1: 큐브가 사라지는 현상 방지. 카메라 위치를 강제 재설정
+                camera.position.set(0, 0, 8);
+                camera.lookAt(0, 0, 0);
+
                 controls.target.set(0, 0, 0);
                 controls.update(); // 1차 업데이트: Target 반영
                 
-                // ⭐ 큐브가 사라지는 현상 방지 및 Target을 확실히 고정
                 controls.update(); // 2차 업데이트: 변경된 Target을 렌더링에 완전히 적용
             }
             resolve();

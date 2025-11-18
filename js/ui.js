@@ -482,3 +482,227 @@
     };
 
 })();
+
+    // ------------------------------------------------
+    // removable face (잎) 선택 – leaf id
+    // ------------------------------------------------
+    function pickRemovableFace(net) {
+        const adj = buildAdjacency(net);
+        for (let i = 0; i < 6; i++) {
+            if (adj[i].length === 1) return i;
+        }
+        return 0;
+    }
+
+    // ------------------------------------------------
+    // adjacency 계산
+    // ------------------------------------------------
+    function buildAdjacency(net) {
+        const adj = [...Array(6)].map(() => []);
+
+        for (let i = 0; i < net.faces.length; i++) {
+            for (let j = i + 1; j < net.faces.length; j++) {
+
+                const fi = net.faces[i];
+                const fj = net.faces[j];
+
+                const ei = getEdges(fi);
+                const ej = getEdges(fj);
+
+                for (let a = 0; a < 4; a++) {
+                    for (let b = 0; b < 4; b++) {
+                        if (sameEdge(ei[a], ej[b])) {
+                            adj[fi.id].push({ to: fj.id, eA: a, eB: b });
+                            adj[fj.id].push({ to: fi.id, eA: b, eB: a });
+                        }
+                    }
+                }
+            }
+        }
+        return adj;
+    }
+
+    function getEdges(f) {
+        return [
+            { a: [f.u, f.v], b: [f.u + f.w, f.v] },
+            { a: [f.u + f.w, f.v], b: [f.u + f.w, f.v + f.h] },
+            { a: [f.u + f.w, f.v + f.h], b: [f.u, f.v + f.h] },
+            { a: [f.u, f.v + f.h], b: [f.u, f.v] }
+        ];
+    }
+
+    function sameEdge(e1, e2) {
+        return (
+            Math.abs(e1.a[0] - e2.b[0]) < EPS &&
+            Math.abs(e1.a[1] - e2.b[1]) < EPS &&
+            Math.abs(e1.b[0] - e2.a[0]) < EPS &&
+            Math.abs(e1.b[1] - e2.a[1]) < EPS
+        );
+    }
+
+    function edgeLength(edge) {
+        const dx = edge.b[0] - edge.a[0];
+        const dy = edge.b[1] - edge.a[1];
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // ------------------------------------------------
+    // 후보 위치 계산
+    // ------------------------------------------------
+    function computeCandidatePositions(net) {
+        candidatePositions = [];
+
+        const removedFace = net.faces.find(f => f.id === removedFaceId);
+        if (!removedFace) return;
+
+        const activeFaces = net.faces.filter(f => f.id !== removedFaceId);
+
+        for (const parent of activeFaces) {
+            const edgesF = getEdges(parent);
+            const edgesR = getEdges(removedFace);
+
+            for (let eP = 0; eP < 4; eP++) {
+                for (let eR = 0; eR < 4; eR++) {
+                    if (Math.abs(edgeLength(edgesF[eP]) - edgeLength(edgesR[eR])) > EPS)
+                        continue;
+
+                    const pos = computePlacementByAttachment(parent, removedFace, eP);
+                    if (!pos) continue;
+
+                    const exist = candidatePositions.some(cp =>
+                        Math.abs(cp.u - pos.u) < EPS &&
+                        Math.abs(cp.v - pos.v) < EPS
+                    );
+                    if (!exist) candidatePositions.push(pos);
+                }
+            }
+        }
+    }
+
+    function computePlacementByAttachment(parent, removed, edgeIndex) {
+        let ru, rv;
+
+        switch (edgeIndex) {
+            case 0: ru = parent.u;               rv = parent.v - removed.h; break; // top
+            case 1: ru = parent.u + parent.w;    rv = parent.v;             break; // right
+            case 2: ru = parent.u;               rv = parent.v + parent.h;  break; // bottom
+            case 3: ru = parent.u - removed.w;   rv = parent.v;             break; // left
+            default: return null;
+        }
+        return { u: ru, v: rv, w: removed.w, h: removed.h };
+    }
+
+    function isPositionOccupied(pos) {
+        return currentNet.faces.some(f =>
+            f.id !== removedFaceId &&
+            Math.abs(f.u - pos.u) < EPS &&
+            Math.abs(f.v - pos.v) < EPS
+        );
+    }
+
+    // ------------------------------------------------
+    // 클릭 처리
+    // ------------------------------------------------
+    function onCanvasClick(evt) {
+        if (!canvas || !currentNet || !window.CubeProject?.currentProblem)
+            return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = evt.clientX - rect.left;
+        const y = evt.clientY - rect.top;
+
+        const u = x / UNIT - U_OFFSET;
+        const v = y / UNIT - V_OFFSET;
+
+        // 전개도 완성 모드
+        if (window.CubeProject.currentProblem.mode === window.CubeProject.MAIN_MODE.NET_BUILD) {
+            for (const pos of candidatePositions) {
+                if (
+                    u >= pos.u && u < pos.u + pos.w &&
+                    v >= pos.v && v < pos.v + pos.h &&
+                    !isPositionOccupied(pos)
+                ) {
+                    UI.placed = pos;
+                    UI.renderNet(currentNet, { highlightPositions: true });
+                    return;
+                }
+            }
+        }
+
+        // 겹침 찾기 모드
+        else {
+            const success = window.Overlap.recordClick(u, v);
+            if (success) UI.renderNet(currentNet);
+        }
+    }
+
+    // ------------------------------------------------
+    // 메인에서 호출하는 정답 판정
+    // ------------------------------------------------
+    UI.checkPieceResult = function (net) {
+        if (!net || net.faces.length !== 6) {
+            Validator.lastError = "면 개수가 6개가 아닙니다.";
+            return false;
+        }
+        return Validator.validateNet(net);
+    };
+
+    UI.checkOverlapResult = function (net) {
+        return window.Overlap.checkUserAnswer(net);
+    };
+
+})();
+
+// ------------------------------------------------
+// 겹침 문제용 – 선택 하이라이트
+// ------------------------------------------------
+function drawOverlapElement(elem, color) {
+    if (!elem || !currentNet) return;
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+
+    const face = currentNet.faces.find(f => f.id === elem.face);
+    if (!face) return;
+
+    if (elem.type === "vertex") {
+        const x = (elem.x + U_OFFSET) * UNIT;
+        const y = (elem.y + V_OFFSET) * UNIT;
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (elem.type === "edge") {
+        const edges = getEdges(face);
+        const e = edges[elem.edge];
+
+        const x1 = (e.a[0] + U_OFFSET) * UNIT;
+        const y1 = (e.a[1] + V_OFFSET) * UNIT;
+        const x2 = (e.b[0] + U_OFFSET) * UNIT;
+        const y2 = (e.b[1] + V_OFFSET) * UNIT;
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.lineCap = "round";
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+
+// ------------------------------------------------
+// UI에서 main.js가 쓰는 getter
+// ------------------------------------------------
+UI.getRemovedFaceId = function () {
+    return removedFaceId;
+};
+
+
+// ------------------------------------------------
+// UI 모듈 끝
+// ------------------------------------------------
+
+})();

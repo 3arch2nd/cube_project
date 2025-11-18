@@ -20,7 +20,6 @@
     // OrbitControls
     let controls = null;
     let animationStarted = false;
-    // let isAutoCameraMoving = false; // ❌ 삭제
 
     // ------------------------------------------------------------
     // 전개도 데이터
@@ -98,7 +97,7 @@
         function loop() {
             requestAnimationFrame(loop);
 
-            // ✨ 수정: controls가 유효하면 무조건 update를 호출합니다.
+            // controls가 유효하면 무조건 update를 호출합니다.
             if (controls) {
                 controls.update(); 
             }
@@ -158,7 +157,7 @@
             controls.target.set(0, 0, 0);
             controls.update();
 
-            // ⭐ 최종 보강: 캔버스가 상호작용을 잡도록 강제합니다. (tabIndex, 포커스)
+            // 캔버스가 상호작용을 잡도록 강제합니다. (tabIndex, 포커스)
             renderer.domElement.tabIndex = 1; 
             renderer.domElement.style.outline = 'none'; 
             renderer.domElement.addEventListener('pointerdown', () => {
@@ -561,10 +560,13 @@
         // 5) 평면 상태로 배치
         layoutFlat2D();
 
-        // 6) 카메라/컨트롤 타겟 초기화 (init에서 설정된 0,0,8 위치를 유지합니다)
-        camera.position.set(0, 0, 8);
+        // 6) 카메라/컨트롤 타겟 초기화 (문제 로딩 시 항상 초기 상태로 돌아감)
+        camera.position.set(0, 0, 8); // ⭐ 카메라 거리를 0, 0, 8로 재설정 (위에서 보는 시점)
         camera.lookAt(0, 0, 0);
+        
         if (controls) {
+            // ⭐ OrbitControls의 내부 회전 상태를 완전히 초기화 (다음 문제 시작 시 필수)
+            controls.reset(); 
             controls.target.set(0, 0, 0);
             controls.update();
         }
@@ -608,7 +610,10 @@
             if (controls) {
                 controls.enabled = true; // 터치/마우스 회전 가능하도록 설정
                 controls.target.set(0, 0, 0);
-                controls.update();
+                controls.update(); // 1차 업데이트: Target 반영
+                
+                // ⭐ 큐브가 사라지는 현상 방지 및 Target을 확실히 고정
+                controls.update(); // 2차 업데이트: 변경된 Target을 렌더링에 완전히 적용
             }
             resolve();
         });

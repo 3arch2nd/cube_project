@@ -48,6 +48,11 @@
                 engine = new BABYLON.Engine(threeCanvas, true);
                 scene = new BABYLON.Scene(engine);
 
+                // ⭐ 추가: scene 객체를 디버깅을 위해 전역으로 노출
+                window.scene = scene;
+                // ⭐ 추가: engine 객체를 디버깅을 위해 전역으로 노출
+                window.engine = engine;
+
                 // ⭐ FoldEngine 초기화 및 OrbitCamera 설정
                 FoldEngine.init(threeCanvas, engine, scene);
 

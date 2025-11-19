@@ -43,7 +43,7 @@
         engine = babylonEngine;
         scene = babylonScene;
 
-        setupCameraAndLight();
+        setupAndLight();
         setupEnvironment();
         startRenderLoop();
     };
@@ -65,13 +65,13 @@
 
         // 정면에서 보는 ArcRotateCamera
         camera = new BABYLON.ArcRotateCamera(
-            "camera",
-            -Math.PI / 2,   // alpha: -90도 → +Z 방향 앞
-            Math.PI / 2.2,  // beta: 약간 위에서 내려다보는 느낌
-            8,
-            new BABYLON.Vector3(0, 0, 0),
-            scene
-        );
+    "camera",
+    Math.PI / 2,      // 정면
+    Math.PI / 3,      // 약간 위
+    8,                // 거리
+    new BABYLON.Vector3(0, 0, 0),
+    scene
+);
         camera.attachControl(canvas, true);
         camera.lowerRadiusLimit = 3;
         camera.upperRadiusLimit = 30;

@@ -168,7 +168,9 @@
     FoldEngine.buildFromFaces = function (faces, adjFlat, rootIdx) {
         disposeAll();
 
-        facesSorted = faces.slice();
+        // ⭐ adjacency가 face.id 기반이므로 id 기준으로 정렬 필수
+facesSorted = faces.slice().sort((a, b) => a.id - b.id);
+
         rootIndex = rootIdx || 0;
 
         // ⭐ dir 기반 adjacency 변환

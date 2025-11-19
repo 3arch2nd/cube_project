@@ -32,7 +32,7 @@
 
     let netCanvas, threeCanvas;
 
-    // ⭐ 추가: Babylon 엔진/씬 전역 참조
+    // Babylon 엔진/씬 전역 참조
     let engine = null;
     let scene = null;
 
@@ -45,18 +45,14 @@
         netCanvas = document.getElementById("net-canvas");
         threeCanvas = document.getElementById("three-view");
 
-        // ✅ 수정 포인트 1: Babylon 엔진 + Scene 생성 후 FoldEngine 초기화
+        // Babylon 엔진 + Scene 생성 후 FoldEngine 초기화
         if (typeof BABYLON !== "undefined" && typeof FoldEngine !== "undefined") {
             try {
-                // Babylon 엔진 생성
                 engine = new BABYLON.Engine(threeCanvas, true);
-                // 기본 Scene 생성
                 scene = new BABYLON.Scene(engine);
 
-                // FoldEngine에 캔버스/엔진/씬 전달
                 FoldEngine.init(threeCanvas, engine, scene);
 
-                // 리사이즈 대응
                 window.addEventListener("resize", () => {
                     if (engine) {
                         engine.resize();
@@ -282,7 +278,18 @@
 
         // 3D 전개도용 데이터 준비
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
-await FoldEngine.loadNet(netFor3D);
+
+        // ⭐ 전개도 완성 모드에서는 "빠진 조각"을 3D에서 투명 처리
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD && window.UI && UI.getRemovedFaceId) {
+            const removedId = UI.getRemovedFaceId();
+            netFor3D.faces.forEach(f => {
+                if (f.id === removedId) {
+                    f._hidden = true;   // FoldEngine이 이 face를 투명 처리하게 함
+                }
+            });
+        }
+
+        await FoldEngine.loadNet(netFor3D);
         FoldEngine.unfoldImmediate();
 
         // 겹침 모드라면 선택 초기화
@@ -327,7 +334,8 @@ await FoldEngine.loadNet(netFor3D);
                         u: placedPos.u,
                         v: placedPos.v,
                         w: placedPos.w,
-                        h: placedPos.h
+                        h: placedPos.h,
+                        color: placedPos.color || "#FFD54F"
                     });
                     netForFold.faces.sort((a, b) => a.id - b.id);
                 }
@@ -342,24 +350,19 @@ await FoldEngine.loadNet(netFor3D);
                 correct = window.Overlap.checkUserAnswer(netForFold);
             }
 
-            // 다시 평면 상태에서 시작 → 접기 애니메이션
+            // 다시 평면 상태에서 시작 → (현재는 접기 애니메이션 스텁)
             FoldEngine.unfoldImmediate();
 
             FoldEngine
-                .foldAnimate(1.5)        // 1. 큐브 접기 (1.5초)
-                // ⭐ showSolvedView 호출 및 카메라 이동 시간(1.0초) 전달
-                .then(() => FoldEngine.showSolvedView(1.0)) // 2. 카메라 중앙 이동 및 회전 활성화 (1.0초)
-                // 3. 카메라 이동 완료 후 팝업
+                .foldAnimate(1.5)  // 현재는 아무것도 안 하지만, Promise는 resolve됨
+                .then(() => FoldEngine.showSolvedView(1.0))
                 .then(() => {
-
-                    // ✨ 큐브가 완전히 닫힌 후 50ms 딜레이
                     setTimeout(() => {
                         if (correct) {
                             alert("정답입니다! 🎉");
                             btnCheck.classList.add("hidden");
                             document.getElementById("btn-next").classList.remove("hidden");
                         } else {
-                            // 요청: 문구 단순화
                             alert("다시 생각해 볼까요? 🤔");
 
                             btnCheck.disabled = false;
@@ -371,13 +374,11 @@ await FoldEngine.loadNet(netFor3D);
                                     Overlap.startSelection(currentProblem.net);
                                     UI.renderNet(currentProblem.net, {});
                                 } else {
-                                    // 같은 문제, 같은 후보 위치 다시 보여주기
                                     UI.renderNet(currentProblem.net, { highlightPositions: true });
                                 }
-                            }, 1500); // 오답 후 펼쳐진 상태를 보여주는 딜레이
+                            }, 1500);
                         }
-                    }, 50); // 50ms 딜레이
-
+                    }, 50);
                 })
                 .catch(err => {
                     console.error("Fold Animation Error:", err);
@@ -406,7 +407,6 @@ await FoldEngine.loadNet(netFor3D);
 
     // ------------------------------------------------
     // 결과 페이지
-    // (지금은 단순히 '푼 문제 수 / 전체' 비율로 표시)
     // ------------------------------------------------
     function showResultPage() {
         const correctCount = currentIndex; // 추후 정답 개수 별도 집계 가능

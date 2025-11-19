@@ -163,7 +163,11 @@
         disposeAll();
 
         facesSorted = faces.slice();
-        adjacency = adj.map(row => row.map(item => Object.assign({}, item)));
+        if (Array.isArray(adj[0])) {
+    adjacency = adj.map(row => row.map(item => Object.assign({}, item)));
+} else {
+    adjacency = adj.map(item => Object.assign({}, item));
+}
         rootIndex = rootIdx || 0;
 
         computeNetCenter();

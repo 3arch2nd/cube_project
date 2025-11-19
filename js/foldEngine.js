@@ -202,40 +202,64 @@
         }
     }
 
-    // ============================================================
-    // 정육면체 면 Mesh 생성
-    // ============================================================
     function createAllFacesMeshes() {
-        nodes = [];
-        const N = facesSorted.length;
-        const size = options.cubeSize || 1.0;
+    nodes = [];
+    const N = facesSorted.length;
+    const size = options.cubeSize || 1.0;
 
-        for (let i = 0; i < N; i++) {
-            const face = facesSorted[i];
+    // 색 팔레트 (필요하면 UI에 맞춰 수정 가능)
+    const COLOR_PALETTE = [
+        "#ffd700", // yellow
+        "#87ceeb", // blue
+        "#98fb98", // green
+        "#dda0dd", // purple
+        "#ff9999", // pink
+        "#ff8c00"  // orange
+    ];
 
-            const plane = BABYLON.MeshBuilder.CreatePlane(
-                "face_" + i,
-                { size: size },
-                scene
-            );
+    for (let i = 0; i < N; i++) {
+        const face = facesSorted[i];
 
-            const mat = new BABYLON.StandardMaterial("faceMat_" + i, scene);
-            mat.diffuseColor = new BABYLON.Color3(
-                face.color.r,
-                face.color.g,
-                face.color.b
-            );
-            mat.alpha = options.faceOpacity;
-            plane.material = mat;
+        // 1) Plane 생성
+        const plane = BABYLON.MeshBuilder.CreatePlane(
+            "face_" + i,
+            { size: size },
+            scene
+        );
 
-            plane.metadata = { faceIndex: i };
-            plane.isPickable = true;
+        // 2) 재질 생성
+        const mat = new BABYLON.StandardMaterial("faceMat_" + i, scene);
 
-            plane.rotationQuaternion = BABYLON.Quaternion.Identity();
+        let hexColor = "#cccccc";
 
-            nodes.push(plane);
+        // color가 hex 문자열인 경우
+        if (typeof face.color === "string") {
+            hexColor = face.color;
         }
+
+        // color가 인덱스인 경우
+        else if (typeof face.color === "number") {
+            hexColor = COLOR_PALETTE[face.color % COLOR_PALETTE.length];
+        }
+
+        // Babylon Color3로 변환
+        const c3 = BABYLON.Color3.FromHexString(hexColor);
+
+        mat.diffuseColor = c3;
+        mat.alpha = options.faceOpacity;
+
+        plane.material = mat;
+
+        // 3) 초기 회전값 설정
+        plane.rotationQuaternion = BABYLON.Quaternion.Identity();
+
+        plane.metadata = { faceIndex: i };
+        plane.isPickable = true;
+
+        nodes.push(plane);
     }
+}
+
 
     // ============================================================
     // Parent Tree 구성

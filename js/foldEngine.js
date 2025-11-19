@@ -29,6 +29,8 @@
 
         /**
          * 큐브 접기 시나리오에 따른 각 면의 회전축, 각도, 부모 관계를 정의합니다.
+         * localOffset: Face Mesh가 Hinge Transform의 원점(회전 중심)을 기준으로 이동해야 할 위치입니다.
+         * hingePos: Hinge Transform이 부모 노드를 기준으로 위치해야 할 곳입니다. (펼침 상태에서는 Face Mesh의 중심 위치)
          */
         getFaceConfig(size) {
             const halfSize = size / 2;
@@ -42,7 +44,7 @@
                 2: { 
                     key: 'front', parentId: 1, 
                     hingePos: new BABYLON.Vector3(0, 0, halfSize), 
-                    localOffset: new BABYLON.Vector3(0, 0, halfSize), // Face Mesh는 Hinge로부터 Z축 양수 방향으로 halfSize 이동
+                    localOffset: new BABYLON.Vector3(0, 0, halfSize), 
                     axis: BABYLON.Vector3.Right(), angle: Math.PI / 2 
                 },
 
@@ -142,7 +144,7 @@
                     const hingeTransform = new BABYLON.TransformNode(`hinge_${config.key}`, this.scene);
                     this.transforms[config.key] = hingeTransform;
                     
-                    // Face는 Hinge의 자식. Face의 로컬 위치 (펼침 상태의 중심)
+                    // Face는 Hinge의 자식. Face의 로컬 위치를 Hinge 모서리(힌지 원점)에 오도록 조정
                     face.position.copyFrom(config.localOffset); 
                     face.parent = hingeTransform; 
                     nodeMap.set(idNum, hingeTransform); 
@@ -153,6 +155,9 @@
                     hingeTransform.parent = parentNode;
                     
                     // ⭐ Hinge 노드의 로컬 위치 설정 (Hinge 모서리 위치)
+                    // Hinge Transform의 position은 Bottom Face를 기준으로 힌지 모서리가 위치해야 하는 로컬 좌표입니다.
+                    // 이 위치가 잘못되어 타일이 겹치고 힌지가 제각각 동작했습니다.
+                    
                     // Hinge Transform의 월드 위치 = Face Mesh의 2D 펼침 월드 중심 위치 - Face Mesh의 로컬 위치 오프셋
                     const targetHingeWorldPos = initialWorldPos.subtract(config.localOffset);
                     
@@ -164,7 +169,7 @@
                     // Bottom Face (ID 1)는 Base Transform의 자식
                     face.parent = this.baseTransform; 
                     
-                    // Bottom Face를 Base Transform의 로컬 원점 (0,0,0)에 오도록 이동
+                    // Bottom Face의 중심이 2D 전개도 상의 중심에 오도록 이동
                     face.position.copyFrom(initialWorldPos); 
                     nodeMap.set(idNum, face);
 

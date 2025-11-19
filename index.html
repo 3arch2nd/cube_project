@@ -106,7 +106,6 @@
             /* 기존 스타일 유지 */
             transform: translateZ(0); 
             will-change: transform;
-            /* 💡 수정: OrbitControls 사용을 위해 tabindex 제거 */
         }
         
         /* ⭐ 추가: 슬라이더 제어판 스타일 */
@@ -254,7 +253,9 @@
                 <canvas id="net-canvas" width="350" height="350"></canvas>
             </div>
             
-            <canvas id="three-view" width="350" height="350" draggable="false"></canvas> <div id="fold-control">
+            <canvas id="three-view" width="350" height="350" draggable="false"></canvas>
+
+            <div id="fold-control">
                 <span>펼침 (0)</span>
                 <input type="range" id="fold-slider" min="0" max="1" step="0.01" value="0">
                 <span>(1) 접힘</span>
@@ -305,8 +306,6 @@
 <script src="./js/foldEngine.js"></script> 
 
 <script src="./js/main.js"></script>
-
-
 
 </body>
 </html>

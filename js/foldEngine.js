@@ -1,9 +1,8 @@
 /**
- * foldEngine.js — Babylon.js 평면 전개도 표시 안정판
- * --------------------------------------------------
- * - 2D 전개도와 동일한 배열/색으로 3D 캔버스에 표시
- * - 접기(fold) 관련 함수는 아직 스텁(Promise) 처리
- * - main.js에서 사용하는 API 시그니처 유지
+ * foldEngine.js — 2D 전개도와 1:1로 맞춘 Babylon "평면" 버전
+ * ------------------------------------------------------------
+ * - 2D 전개도와 모양/방향/색이 완전히 동일하게 보이도록만 구현
+ * - 접기(fold) 관련 함수는 전부 스텁 (아무 동작 안 함, 에러도 안 냄)
  */
 
 (function () {
@@ -12,112 +11,89 @@
     const FoldEngine = {};
     window.FoldEngine = FoldEngine;
 
-    // Babylon 객체
     let canvas = null;
     let engine = null;
     let scene = null;
     let camera = null;
-    let light = null;
 
-    // 전개도 데이터
     let facesSorted = [];
-    let adjacency = [];
     let nodes = [];
     let netCenter = { x: 0, y: 0 };
 
     const options = {
-        cellSize: 1.0,       // 한 칸 크기
-        faceOpacity: 0.95,
+        cellSize: 1.0,
         backgroundColor: "#ffffff"
     };
 
     // ============================================================
-    // PUBLIC: 초기화
-    //  main.js에서 FoldEngine.init(threeCanvas) 형태로 호출
+    // PUBLIC: init(canvas)
+    // main.js 에서 FoldEngine.init(threeCanvas) 식으로 호출됨
     // ============================================================
     FoldEngine.init = function (canvasElement) {
         canvas = canvasElement;
 
-        // Babylon 엔진/씬 생성
         engine = new BABYLON.Engine(canvas, true);
         scene = new BABYLON.Scene(engine);
 
-        setupCameraAndLight();
+        setupCamera();
         setupEnvironment();
         startRenderLoop();
     };
 
-    // 옵션 변경(필요시)
-    FoldEngine.setOptions = function (opt) {
-        Object.assign(options, opt || {});
-        if (scene) {
-            const bg = BABYLON.Color3.FromHexString(options.backgroundColor);
-            scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1.0);
-        }
-    };
-
     // ============================================================
-    // 카메라 / 조명
+    // 카메라: 정면(앞에서 보는) 직교 카메라
+    // X = 오른쪽, Y = 위
     // ============================================================
-    function setupCameraAndLight() {
-        if (!scene) return;
-
-        // 위에서 약간 비스듬히 내려다보는 ArcRotateCamera
-        camera = new BABYLON.ArcRotateCamera(
+    function setupCamera() {
+        // 카메라를 Z축 +쪽에서 원점을 향해 바라보게 함
+        camera = new BABYLON.FreeCamera(
             "camera",
-            Math.PI / 2,      // alpha : +X 방향에서
-            Math.PI / 3,      // beta  : 위에서 60도 정도 내려다보기
-            8,                // radius: 거리
-            new BABYLON.Vector3(0, 0, 0),
+            new BABYLON.Vector3(0, 0, 10),
             scene
         );
-        camera.attachControl(canvas, true);
-        camera.lowerRadiusLimit = 3;
-        camera.upperRadiusLimit = 20;
+        camera.setTarget(new BABYLON.Vector3(0, 0, 0));
 
-        light = new BABYLON.HemisphericLight(
-            "hemi",
-            new BABYLON.Vector3(0, 1, 0),
-            scene
-        );
-        light.intensity = 0.95;
+        // 직교(orthographic) 모드 → 기울기/원근감 없음
+        camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+
+        const orthoSize = 5;
+        camera.orthoLeft   = -orthoSize;
+        camera.orthoRight  =  orthoSize;
+        camera.orthoTop    =  orthoSize;
+        camera.orthoBottom = -orthoSize;
+
+        camera.minZ = 0.1;
+        camera.maxZ = 1000;
     }
 
-    // 배경색 등 환경 설정
+    // ============================================================
+    // 배경색만 설정 (조명 없음 = 색 안날아감)
+    // ============================================================
     function setupEnvironment() {
-        if (!scene) return;
         const bg = BABYLON.Color3.FromHexString(options.backgroundColor);
         scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1.0);
     }
 
     // ============================================================
-    // PUBLIC: loadNet (main.js에서 호출)
-    // net: { faces, adjacency, rootIndex } 구조
+    // PUBLIC: loadNet
+    // net = { faces, adjacency, rootIndex }
     // ============================================================
     FoldEngine.loadNet = function (net) {
-        if (!net) return;
+        if (!net || !net.faces) return;
 
-        buildFromFaces(net.faces, net.adjacency || [], net.rootIndex || 0);
-        FoldEngine.unfoldImmediate();   // 평면 상태로 표시
-    };
-
-    // ============================================================
-    // 내부: faces / adjacency로부터 3D용 데이터 구성
-    // (접기 애니메이션은 아직 사용 X, adjacency는 보관만)
-    // ============================================================
-    function buildFromFaces(faces, adjFlat, rootIdx) {
         disposeAll();
 
-        // id 순으로 정렬해 두면 색/좌표 일관성 유지
-        facesSorted = faces.slice();
-        adjacency = adjFlat || [];
+        // faces 순서는 CubeNets가 준 그대로 사용 (색/배열 유지)
+        facesSorted = net.faces.slice();
 
         computeNetCenter();
-        createAllFaceMeshes();
+        createFaceMeshes();
         layoutFlat2D();
-    }
+    };
 
-    // mesh 정리
+    // ------------------------------------------------------------
+    // meshes 정리
+    // ------------------------------------------------------------
     function disposeAll() {
         if (nodes && nodes.length) {
             nodes.forEach(m => m && m.dispose && m.dispose());
@@ -126,44 +102,7 @@
     }
 
     // ============================================================
-    // 면(mesh) 생성 — CreateGround 사용해서 위쪽을 향하도록 함
-    // ============================================================
-    function createAllFaceMeshes() {
-        nodes = [];
-        const N = facesSorted.length;
-        const size = options.cellSize;
-
-        for (let i = 0; i < N; i++) {
-            const f = facesSorted[i];
-
-            const ground = BABYLON.MeshBuilder.CreateGround(
-                "face_" + f.id,
-                { width: size, height: size },
-                scene
-            );
-
-            const mat = new BABYLON.StandardMaterial("mat_" + f.id, scene);
-
-            // 색상: CubeNets가 넣어준 face.color 우선 사용
-            let hex = "#cccccc";
-            if (typeof f.color === "string") {
-                hex = f.color;
-            }
-
-            const c3 = BABYLON.Color3.FromHexString(hex);
-            mat.diffuseColor = c3;
-            mat.emissiveColor = c3.scale(0.25); // 살짝 밝게
-            mat.alpha = options.faceOpacity;
-            ground.material = mat;
-
-            // CreateGround는 기본적으로 위(+Y)쪽을 향하므로
-            // 따로 회전은 필요 없음.
-            nodes.push(ground);
-        }
-    }
-
-    // ============================================================
-    // 전개도 중심 계산
+    // 중심 계산 (u, v 기준)
     // ============================================================
     function computeNetCenter() {
         let minU = Infinity, maxU = -Infinity;
@@ -181,87 +120,81 @@
     }
 
     // ============================================================
-    // 2D 전개도 → XZ 평면으로 평면 배치
-    //
-    //  - 2D u → X
-    //  - 2D v → Z (아래로 갈수록 +Z)
-    //  - 카메라는 위(+Y)에서 내려다보므로,
-    //    왼쪽 전개도와 거의 같은 느낌으로 보임
+    // 면(plane) 생성 — 카메라 정면을 바라보는 평면
     // ============================================================
-    function layoutFlat2D() {
-        const N = facesSorted.length;
+    function createFaceMeshes() {
+        nodes = [];
+
         const size = options.cellSize;
 
-        for (let i = 0; i < N; i++) {
-            const f = facesSorted[i];
+        facesSorted.forEach(face => {
+            const plane = BABYLON.MeshBuilder.CreatePlane(
+                "face_" + face.id,
+                { size: size },
+                scene
+            );
 
+            const mat = new BABYLON.StandardMaterial("mat_" + face.id, scene);
+
+            const hex = face.color || "#cccccc";
+            const c3  = BABYLON.Color3.FromHexString(hex);
+
+            // 조명 영향 없이 깔끔한 색을 위해 emissive만 사용
+            mat.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            mat.emissiveColor = c3;
+            mat.disableLighting = true;
+
+            plane.material = mat;
+
+            // 카메라를 정면에서 보고 있으므로 별도 회전 필요 없음
+            plane.rotationQuaternion = BABYLON.Quaternion.Identity();
+
+            nodes.push(plane);
+        });
+    }
+
+    // ============================================================
+    // 2D 전개도(u,v) → 3D 위치(x,y)
+    //  - u 증가: 오른쪽 → x 증가
+    //  - v 증가: 아래쪽 → y 감소  (그래서 부호 반전)
+    // ============================================================
+    function layoutFlat2D() {
+        const size = options.cellSize;
+
+        facesSorted.forEach((f, i) => {
             const cx = f.u + f.w / 2;
             const cy = f.v + f.h / 2;
 
             const x = (cx - netCenter.x) * size;
-            const z = (cy - netCenter.y) * size;
+            const y = (netCenter.y - cy) * size;   // ⬅ v 증가가 아래이므로 부호 반전
 
-            nodes[i].position = new BABYLON.Vector3(x, 0, z);
-        }
+            nodes[i].position = new BABYLON.Vector3(x, y, 0);
+        });
     }
 
     // ============================================================
-    // PUBLIC: 평면 상태로 즉시 적용
+    // PUBLIC: unfold / reset (지금은 전개도 평면만 유지)
     // ============================================================
     FoldEngine.unfoldImmediate = function () {
         layoutFlat2D();
     };
+    FoldEngine.unfold = FoldEngine.unfoldImmediate;
+    FoldEngine.reset = FoldEngine.unfoldImmediate;
 
-    // 이하 fold 관련 API는 아직 스텁으로 두되,
-    // main.js 의 Promise 체인과 호환되도록 구현
+    // 접기 관련 API들: main.js Promise 체인 호환용 스텁
+    FoldEngine.foldImmediate = function () {};
+    FoldEngine.foldTo = function () {};
+    FoldEngine.foldStaticTo = function () {};
+    FoldEngine.foldAnimate = function (t) { return Promise.resolve(); };
+    FoldEngine.showSolvedView = function (t) { return Promise.resolve(); };
 
-    // 접기 애니메이션 (현재는 아무 것도 안 하고 바로 resolve)
-    FoldEngine.foldAnimate = function (durationSec) {
-        return new Promise(resolve => {
-            // 나중에 종이접기 애니메이션을 여기서 구현할 수 있음
-            resolve();
-        });
-    };
-
-    // 정답 뷰 (현재는 카메라 위치 살짝 조정만 하고 바로 resolve)
-    FoldEngine.showSolvedView = function (durationSec) {
-        return new Promise(resolve => {
-            // 필요하다면 여기서 카메라 target/zoom 조절
-            resolve();
-        });
-    };
-
-    // 기타 호환용 함수들 (실제 동작은 평면 상태 유지)
-    FoldEngine.foldImmediate = function (angleRad) {
-        // 아직 접기 구현 없음
-    };
-
-    FoldEngine.foldTo = function (angleRad) {
-        // 아직 접기 구현 없음
-    };
-
-    FoldEngine.unfold = function () {
-        FoldEngine.unfoldImmediate();
-    };
-
-    FoldEngine.reset = function () {
-        FoldEngine.unfoldImmediate();
-    };
-
-    FoldEngine.foldStaticTo = function (angleRad) {
-        // validator/overlap 에서 호출할 수 있으므로 정의만 해 둠
-    };
-
-    FoldEngine.getFaceGroups = function () {
-        return nodes;
-    };
+    FoldEngine.getFaceGroups = function () { return nodes; };
 
     // ============================================================
-    // 렌더 루프 / 리사이즈
+    // render loop / resize
     // ============================================================
     function startRenderLoop() {
-        if (!engine || !scene) return;
-        engine.runRenderLoop(function () {
+        engine.runRenderLoop(() => {
             scene.render();
         });
     }

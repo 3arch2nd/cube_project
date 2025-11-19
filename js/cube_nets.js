@@ -1,27 +1,25 @@
 /**
  * cube_nets.js
  *
- *  - 정육면체 전개도(6칸짜리 육소미노) 패턴 11개 정의
- *  - 각 패턴은 격자 좌표(u, v)와 인접 정보(adjacency)를 가짐
- *  - window.CubeNets 로 export
+ * 정육면체 전개도(6칸짜리 육소미노) 패턴 11개 정의
+ * - 각 패턴은 격자 좌표(u, v)와 인접 정보(adjacency)를 가짐
+ * - window.CubeNets 로 export
  */
 
 (function () {
     'use strict';
 
-    // ⭐ UI와 동일한 색 팔레트 (2D와 3D 색 일치 핵심)
+    // 6개 면에 사용할 고정 색상 팔레트 (id 0 ~ 5)
     const PALETTE = [
-        "#FFD54F", // 노랑
-        "#81C784", // 초록
-        "#64B5F6", // 파랑
-        "#BA68C8", // 보라
-        "#F48FB1", // 분홍
-        "#FF8A65"  // 주황
+        "#FFD54F", // 0 노랑
+        "#81C784", // 1 초록
+        "#64B5F6", // 2 파랑
+        "#BA68C8", // 3 보라
+        "#F48FB1", // 4 분홍
+        "#FF8A65"  // 5 주황
     ];
 
-    // ------------------------------------------------------------
-    // 원본 전개도 좌표
-    // ------------------------------------------------------------
+    // 각 전개도 패턴의 셀 좌표 (u, v)
     const RAW_NETS = [
         {
             id: 'net01',
@@ -157,33 +155,25 @@
         }
     ];
 
-    // ------------------------------------------------------------
-    // helper: 깊은 복사
-    // ------------------------------------------------------------
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }
 
-    // ------------------------------------------------------------
-    // 핵심: 전개도 → faces + adjacency 생성
-    // ------------------------------------------------------------
+    // 셀 배열 → faces + adjacency 생성
     function buildNetFromCells(rawNet) {
-
-        // ⭐ color 포함된 face 생성 (id 순서 = 색 순서 유지)
         const faces = rawNet.cells.map(([u, v], idx) => ({
             id: idx,
             u,
             v,
             w: 1,
             h: 1,
-            color: PALETTE[idx % PALETTE.length]   // ★ 색상 추가 !!
+            color: PALETTE[idx]   // ⭐ 색을 id에 고정
         }));
 
-        // adjacency 계산
         const adjacency = [];
+
         for (let i = 0; i < faces.length; i++) {
             for (let j = i + 1; j < faces.length; j++) {
-
                 const a = faces[i];
                 const b = faces[j];
                 const du = b.u - a.u;
@@ -192,15 +182,18 @@
 
                 if (manhattan === 1) {
                     let dirAB, dirBA;
-
                     if (du === 1 && dv === 0) {
-                        dirAB = 'right'; dirBA = 'left';
+                        dirAB = 'right';
+                        dirBA = 'left';
                     } else if (du === -1 && dv === 0) {
-                        dirAB = 'left'; dirBA = 'right';
+                        dirAB = 'left';
+                        dirBA = 'right';
                     } else if (du === 0 && dv === 1) {
-                        dirAB = 'down'; dirBA = 'up';
+                        dirAB = 'down';
+                        dirBA = 'up';
                     } else if (du === 0 && dv === -1) {
-                        dirAB = 'up'; dirBA = 'down';
+                        dirAB = 'up';
+                        dirBA = 'down';
                     }
 
                     adjacency.push({ from: a.id, to: b.id, dir: dirAB });
@@ -217,9 +210,7 @@
         };
     }
 
-    // ------------------------------------------------------------
-    // 전개도 정규화 (중복 제거용)
-    // ------------------------------------------------------------
+    // 정규화 키 (중복 패턴 제거용, 지금은 참고용)
     function normalizeNet(net) {
         const cells = net.faces.map(f => [f.u, f.v]);
 
@@ -247,7 +238,6 @@
 
                 const normal = normalizeCells(rotated);
                 const flipped = normalizeCells(rotated.map(([x, y]) => [x, -y]));
-
                 variants.push(normal);
                 variants.push(flipped);
             }
@@ -270,11 +260,7 @@
         return keys[0];
     }
 
-    // ------------------------------------------------------------
-    // nets 생성 및 export
-    // ------------------------------------------------------------
     const nets = RAW_NETS.map(buildNetFromCells);
-
     const netById = {};
     nets.forEach(net => {
         netById[net.id] = net;
@@ -282,21 +268,30 @@
     });
 
     function getRandomNet() {
-        return deepClone(nets[Math.floor(Math.random() * nets.length)]);
+        const idx = Math.floor(Math.random() * nets.length);
+        return deepClone(nets[idx]);
     }
 
     function getNetById(id) {
-        return netById[id] ? deepClone(netById[id]) : null;
+        const base = netById[id];
+        return base ? deepClone(base) : null;
     }
 
     function cloneNet(net) {
         return deepClone(net);
     }
 
+    // 전개도 완성하기: 임의의 한 face를 "빠진 조각"으로 선택
     function getRandomPieceProblem() {
         const net = getRandomNet();
+        if (!net.faces || net.faces.length !== 6) {
+            throw new Error('CubeNets: 잘못된 정육면체 전개도 데이터입니다.');
+        }
         const removeIndex = Math.floor(Math.random() * net.faces.length);
         const removedFaceId = net.faces[removeIndex].id;
+
+        // UI에서 사용할 수 있도록 net에 표시
+        net.removedFaceId = removedFaceId;
 
         return {
             kind: 'cube-piece',
@@ -305,11 +300,15 @@
         };
     }
 
+    // 겹침 찾기(기존 구조 유지)
     function getRandomOverlapProblem(overlapMode) {
         const net = getRandomNet();
-        let type = overlapMode === 'point' || overlapMode === 'edge'
-            ? overlapMode
-            : Math.random() < 0.5 ? 'point' : 'edge';
+        let type;
+        if (overlapMode === 'point' || overlapMode === 'edge') {
+            type = overlapMode;
+        } else {
+            type = Math.random() < 0.5 ? 'point' : 'edge';
+        }
 
         return {
             kind: 'cube-overlap',
@@ -318,9 +317,6 @@
         };
     }
 
-    // ------------------------------------------------------------
-    // export
-    // ------------------------------------------------------------
     window.CubeNets = {
         nets,
         getRandomNet,

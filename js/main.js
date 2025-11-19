@@ -282,18 +282,7 @@
 
         // 3D 전개도용 데이터 준비
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
-
-        // 전개도 완성 모드에서는 빠진 조각을 3D에는 뺀 상태로 보여줌
-        if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-            const removedId = window.UI.getRemovedFaceId();
-            const idxFace = netFor3D.faces.findIndex(f => f.id === removedId);
-            if (idxFace !== -1) {
-                netFor3D.faces.splice(idxFace, 1);
-            }
-        }
-
-        // ✅ Babylon FoldEngine에 전개도 전달
-        await FoldEngine.loadNet(netFor3D);
+await FoldEngine.loadNet(netFor3D);
         FoldEngine.unfoldImmediate();
 
         // 겹침 모드라면 선택 초기화

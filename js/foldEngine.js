@@ -566,6 +566,24 @@
     FoldEngine.foldStaticTo = function (angleRad) {
         applyFolding(angleRad);
     };
+    
+// ============================================================
+// PUBLIC: loadNet (main.js 호환용)
+// ============================================================
+FoldEngine.loadNet = function (net) {
+    if (!net) return;
+
+    // net.faces, net.adjacency, net.rootIndex 구조라고 가정
+    const faces = net.faces;
+    const adj = net.adjacency;
+    const root = net.rootIndex || 0;
+
+    // 실제 mesh 생성
+    FoldEngine.buildFromFaces(faces, adj, root);
+
+    // 펼친 상태에서 시작
+    FoldEngine.unfoldImmediate();
+};
 
 
 })();

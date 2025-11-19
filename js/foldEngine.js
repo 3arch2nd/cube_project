@@ -134,33 +134,41 @@
     // dir: up, down, left, right
     // ------------------------------------------------------------
     function convertAdjacency(faces, adjFlat) {
-        const N = faces.length;
-        const result = Array.from({ length: N }, () => []);
+    const N = faces.length;
 
-        const dirToEdge = {
-            up: 2,      // 위쪽에 붙는 것은 child가 parent의 bottom-edge와 붙음
-            down: 0,
-            left: 1,
-            right: 3
-        };
+    // 실제 존재하는 face.id 목록
+    const validIds = new Set(faces.map(f => f.id));
 
-        if (!Array.isArray(adjFlat)) return result;
+    // id → index 매핑
+    const idToIndex = {};
+    faces.forEach((f, i) => { idToIndex[f.id] = i; });
 
-        adjFlat.forEach(a => {
-            const { from, to, dir } = a;
-            if (from == null || to == null || !dir) return;
+    const result = Array.from({ length: N }, () => []);
 
-            const edgeA = dirToEdge[dir] ?? 0;
+    const dirToEdge = { up:2, down:0, left:1, right:3 };
 
-            result[from].push({
-                to,
-                edgeA,
-                edgeB: edgeA
-            });
+    adjFlat.forEach(a => {
+        const { from, to, dir } = a;
+        if (!dir) return;
+
+        // ❗ faces 배열에 실제로 존재하는 face만 처리한다
+        if (!validIds.has(from) || !validIds.has(to)) return;
+
+        const iFrom = idToIndex[from];
+        const iTo   = idToIndex[to];
+
+        const edgeA = dirToEdge[dir] ?? 0;
+
+        result[iFrom].push({
+            to: iTo,
+            edgeA,
+            edgeB: edgeA
         });
+    });
 
-        return result;
-    }
+    return result;
+}
+
 
     // ============================================================
     // PUBLIC: faces + adjacency 로 3D 생성

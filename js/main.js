@@ -1,5 +1,5 @@
 /**
- * main.js – 정육면체 전개도/겹침 통합 최신 버전 (Babylon.js 대응 수정)
+ * main.js – 정육면체 전개도/겹침 통합 최신 버전 (Babylon.js 렌더링 루프 추가 완료)
  */
 
 (function () {
@@ -49,7 +49,10 @@
                 scene = new BABYLON.Scene(engine);
 
                 // ⭐ FoldEngine 초기화 및 OrbitCamera 설정
-                FoldEngine.init(threeCanvas, engine, scene); 
+                FoldEngine.init(threeCanvas, engine, scene);
+
+                // ⭐ 추가: 렌더링 루프 시작 (검은 화면 문제 해결의 핵심!)
+                startRenderLoop(); 
 
                 window.addEventListener("resize", () => {
                     if (engine) {
@@ -90,6 +93,19 @@
         
         // ⭐ 슬라이더 제어판 초기 숨김
         document.getElementById("fold-control").classList.add("hidden");
+    }
+
+    // ------------------------------------------------
+    // ⭐ 추가: 렌더링 루프 함수 (3D 뷰를 지속적으로 그리는 역할)
+    // ------------------------------------------------
+    function startRenderLoop() {
+        if (!engine || !scene) return;
+        
+        engine.runRenderLoop(function () {
+            if (scene) {
+                scene.render();
+            }
+        });
     }
 
     // ------------------------------------------------

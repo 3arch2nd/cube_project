@@ -1,5 +1,5 @@
 /**
- * main.js – 정육면체 전개도/겹침 통합 최신 버전
+ * main.js – 정육면체 전개도/겹침 통합 최신 버전 (Babylon.js 대응 수정)
  * - 전개도 완성하기
  * - 겹쳐지는 부분 찾기
  * - ui.js / validator.js / foldEngine.js / overlap.js 와 연동
@@ -32,6 +32,10 @@
 
     let netCanvas, threeCanvas;
 
+    // ⭐ 추가: Babylon 엔진/씬 전역 참조
+    let engine = null;
+    let scene = null;
+
     // ------------------------------------------------
     // 초기화
     // ------------------------------------------------
@@ -41,14 +45,31 @@
         netCanvas = document.getElementById("net-canvas");
         threeCanvas = document.getElementById("three-view");
 
-        // ✨ 수정 포인트 1: 3D 엔진 초기화 안정화 (try-catch 블록 추가)
-        if (typeof FoldEngine !== 'undefined') {
+        // ✅ 수정 포인트 1: Babylon 엔진 + Scene 생성 후 FoldEngine 초기화
+        if (typeof BABYLON !== "undefined" && typeof FoldEngine !== "undefined") {
             try {
-                FoldEngine.init(threeCanvas);
+                // Babylon 엔진 생성
+                engine = new BABYLON.Engine(threeCanvas, true);
+                // 기본 Scene 생성
+                scene = new BABYLON.Scene(engine);
+
+                // FoldEngine에 캔버스/엔진/씬 전달
+                FoldEngine.init(threeCanvas, engine, scene);
+
+                // 리사이즈 대응
+                window.addEventListener("resize", () => {
+                    if (engine) {
+                        engine.resize();
+                    }
+                    if (FoldEngine.onResize) {
+                        FoldEngine.onResize();
+                    }
+                });
             } catch (e) {
-                // 3D 엔진 초기화가 실패하면 콘솔에 알림
-                console.error("FoldEngine.init 실패: THREE.js 또는 OrbitControls 로드 문제.", e);
+                console.error("FoldEngine.init 실패: Babylon.js 초기화 문제.", e);
             }
+        } else {
+            console.error("BABYLON 또는 FoldEngine이 정의되지 않았습니다. 스크립트 로드 순서를 확인하세요.");
         }
 
         bindModeSelectPage();
@@ -259,9 +280,7 @@
         }
         UI.renderNet(currentProblem.net, opt);
 
-        // 3D 엔진 초기화 및 전개도 상태 표시
-        // FoldEngine.init(threeCanvas); // ❌ 이 줄은 삭제되었습니다. (init에서 이미 호출됨)
-
+        // 3D 전개도용 데이터 준비
         const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
 
         // 전개도 완성 모드에서는 빠진 조각을 3D에는 뺀 상태로 보여줌
@@ -273,6 +292,7 @@
             }
         }
 
+        // ✅ Babylon FoldEngine에 전개도 전달
         await FoldEngine.loadNet(netFor3D);
         FoldEngine.unfoldImmediate();
 
@@ -337,14 +357,14 @@
             FoldEngine.unfoldImmediate();
 
             FoldEngine
-                .foldAnimate(1.5)        // 1. 큐브 접기 (1.5초)
-                // ⭐ 수정: showSolvedView를 호출하고 카메라 이동 시간(1.0초)을 인자로 전달합니다.
-                .then(() => FoldEngine.showSolvedView(1.0)) // 2. 카메라 중앙 이동 및 회전 활성화 (1.0초)
-                // 3. 카메라 이동 완료 후 팝업
-                .then(() => {
-                    
-                    // ✨ 수정 2: 큐브가 완전히 닫힌 후 50ms 딜레이를 적용합니다.
-                    setTimeout(() => {
+                .foldAnimate(1.5)        // 1. 큐브 접기 (1.5초)
+                // ⭐ showSolvedView 호출 및 카메라 이동 시간(1.0초) 전달
+                .then(() => FoldEngine.showSolvedView(1.0)) // 2. 카메라 중앙 이동 및 회전 활성화 (1.0초)
+                // 3. 카메라 이동 완료 후 팝업
+                .then(() => {
+
+                    // ✨ 큐브가 완전히 닫힌 후 50ms 딜레이
+                    setTimeout(() => {
                         if (correct) {
                             alert("정답입니다! 🎉");
                             btnCheck.classList.add("hidden");
@@ -365,9 +385,9 @@
                                     // 같은 문제, 같은 후보 위치 다시 보여주기
                                     UI.renderNet(currentProblem.net, { highlightPositions: true });
                                 }
-                            }, 1500); // 이 1500ms는 오답 후 펼쳐진 상태를 보여주는 딜레이입니다.
+                            }, 1500); // 오답 후 펼쳐진 상태를 보여주는 딜레이
                         }
-                    }, 50); // 👈 50ms 딜레이 적용
+                    }, 50); // 50ms 딜레이
 
                 })
                 .catch(err => {

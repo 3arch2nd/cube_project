@@ -51,7 +51,8 @@
                 engine = new BABYLON.Engine(threeCanvas, true);
                 scene = new BABYLON.Scene(engine);
 
-                FoldEngine.init(threeCanvas, engine, scene);
+                // ⭐ FoldEngine을 Babylon 환경으로 초기화
+                FoldEngine.init(threeCanvas, engine, scene); 
 
                 window.addEventListener("resize", () => {
                     if (engine) {
@@ -74,6 +75,9 @@
         bindProblemButtons();
         bindQRPopup();
 
+        // ⭐ 추가: 슬라이더 이벤트 바인딩
+        bindFoldSlider();
+
         // 기본 선택 상태
         document
             .querySelector("#net-run-group button[data-run='practice']")
@@ -86,6 +90,9 @@
             .classList.add("selected");
 
         showPage("mode-select-page");
+        
+        // ⭐ 추가: 슬라이더 제어판 초기 숨김
+        document.getElementById("fold-control").classList.add("hidden");
     }
 
     // ------------------------------------------------
@@ -107,6 +114,13 @@
 
         const target = document.getElementById(pageId);
         if (target) target.classList.remove("hidden");
+        
+        // ⭐ 슬라이더 제어판 표시/숨김 관리
+        if (pageId === "problem-page") {
+             document.getElementById("fold-control").classList.remove("hidden");
+        } else {
+             document.getElementById("fold-control").classList.add("hidden");
+        }
     }
 
     // ------------------------------------------------
@@ -255,6 +269,13 @@
         btnNext.classList.add("hidden");
         btnCheck.classList.remove("hidden");
         btnCheck.disabled = false;
+        
+        // ⭐ 슬라이더 초기화
+        const foldSlider = document.getElementById('fold-slider');
+        foldSlider.value = 0;
+        document.getElementById('slider-value').textContent = '0.00';
+        foldSlider.disabled = false;
+
 
         // 제목
         const title = document.getElementById("problem-title");
@@ -284,18 +305,37 @@
             const removedId = UI.getRemovedFaceId();
             netFor3D.faces.forEach(f => {
                 if (f.id === removedId) {
-                    f._hidden = true;   // FoldEngine이 이 face를 투명 처리하게 함
+                    f._hidden = true;  // FoldEngine이 이 face를 투명 처리하게 함
                 }
             });
         }
 
         await FoldEngine.loadNet(netFor3D);
-        FoldEngine.unfoldImmediate();
+        FoldEngine.unfoldImmediate(); // 초기 상태: 펼침
 
         // 겹침 모드라면 선택 초기화
         if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
             Overlap.startSelection(currentProblem.net);
         }
+    }
+
+
+    // ------------------------------------------------
+    // ⭐ 슬라이더 제어 로직
+    // ------------------------------------------------
+    function bindFoldSlider() {
+        const foldSlider = document.getElementById('fold-slider');
+        const sliderValueSpan = document.getElementById('slider-value');
+
+        foldSlider.addEventListener('input', () => {
+            const progress = parseFloat(foldSlider.value);
+            sliderValueSpan.textContent = progress.toFixed(2);
+            
+            // 핵심: FoldEngine의 foldTo 함수로 3D 모델 실시간 제어
+            if (typeof FoldEngine.foldTo === 'function') {
+                FoldEngine.foldTo(progress); 
+            }
+        });
     }
 
     // ------------------------------------------------
@@ -306,6 +346,7 @@
         document.getElementById("btn-check").addEventListener("click", async () => {
             const btnCheck = document.getElementById("btn-check");
             btnCheck.disabled = true;
+            document.getElementById('fold-slider').disabled = true; // 슬라이더 비활성화
 
             let correct = false;
             let netForFold = currentProblem.net;
@@ -315,6 +356,7 @@
                 if (!placedPos) {
                     alert("조각이 배치되지 않았습니다.");
                     btnCheck.disabled = false;
+                    document.getElementById('fold-slider').disabled = false; 
                     return;
                 }
 
@@ -341,7 +383,7 @@
                 }
 
                 // 3D로 로드 후 검증
-                await FoldEngine.loadNet(netForFold);
+                await FoldEngine.loadNet(netForFold); // 정답 후보 전개도로 3D 뷰 업데이트
                 correct = Validator.validateNet(netForFold);
 
             } else {
@@ -350,41 +392,42 @@
                 correct = window.Overlap.checkUserAnswer(netForFold);
             }
 
-            // 다시 평면 상태에서 시작 → (현재는 접기 애니메이션 스텁)
-            FoldEngine.unfoldImmediate();
-
-            FoldEngine
-                .foldAnimate(1.5)  // 현재는 아무것도 안 하지만, Promise는 resolve됨
-                .then(() => FoldEngine.showSolvedView(1.0))
-                .then(() => {
-                    setTimeout(() => {
-                        if (correct) {
-                            alert("정답입니다! 🎉");
-                            btnCheck.classList.add("hidden");
-                            document.getElementById("btn-next").classList.remove("hidden");
-                        } else {
-                            alert("다시 생각해 볼까요? 🤔");
-
-                            btnCheck.disabled = false;
-
-                            setTimeout(() => {
-                                FoldEngine.unfoldImmediate();
-
-                                if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
-                                    Overlap.startSelection(currentProblem.net);
-                                    UI.renderNet(currentProblem.net, {});
-                                } else {
-                                    UI.renderNet(currentProblem.net, { highlightPositions: true });
-                                }
-                            }, 1500);
-                        }
-                    }, 50);
-                })
-                .catch(err => {
-                    console.error("Fold Animation Error:", err);
-                    alert("정답 확인 중 오류가 발생했습니다.");
+            // ⭐ 애니메이션 로직 수정: 슬라이더를 1로 설정하고 검증 결과에 따라 처리합니다.
+            
+            // 정답/오답에 관계없이 최종 접힌 모양을 보여줍니다.
+            FoldEngine.foldImmediate(); // 3D를 완전히 접힌 상태(t=1)로 즉시 변경
+            document.getElementById('fold-slider').value = 1.0;
+            document.getElementById('slider-value').textContent = '1.00';
+            
+            // 잠깐의 딜레이 후 결과 메시지 표시
+            setTimeout(() => {
+                if (correct) {
+                    alert("정답입니다! 🎉 3D 큐브를 돌려보세요!");
+                    btnCheck.classList.add("hidden");
+                    document.getElementById("btn-next").classList.remove("hidden");
+                    document.getElementById('fold-slider').disabled = false; // 정답 후 재활성화
+                } else {
+                    alert("다시 생각해 볼까요? 🤔 큐브를 펼쳐보며 확인해 보세요.");
+                    
+                    document.getElementById('fold-slider').disabled = false; // 오답 후 재활성화
                     btnCheck.disabled = false;
-                });
+                    
+                    // 1.5초 후 2D 펼침 상태로 복귀
+                    setTimeout(() => {
+                        FoldEngine.unfoldImmediate();
+                        document.getElementById('fold-slider').value = 0.0;
+                        document.getElementById('slider-value').textContent = '0.00';
+
+                        // 2D 캔버스 상태 복구
+                        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                            Overlap.startSelection(currentProblem.net);
+                            UI.renderNet(currentProblem.net, {});
+                        } else {
+                            UI.renderNet(currentProblem.net, { highlightPositions: true });
+                        }
+                    }, 1500);
+                }
+            }, 50);
         });
 
         // 다음 문제

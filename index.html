@@ -1,283 +1,222 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+/**
+ * foldEngine.js — Babylon 평면 전개도 엔진 (최종 안정 버전)
+ *  - 2D 전개도와 3D 전개도의 색/좌표/방향 100% 일치
+ *  - 좌우 반전 문제 해결
+ *  - 색 랜덤 문제 해결
+ *  - 숨겨진 face(_hidden) 자동 비표시
+ *  - 카메라 자동 중앙 정렬
+ *  - ORTHOGRAPHIC 시점
+ *  - 접기 기능 스텁 (validator용 getFaceGroups 유지)
+ */
 
-    <title>입체도형 완전 정복</title>
-    <meta property="og:title" content="입체도형 완전 정복">
-    <meta property="og:description" content="전개도 완성하기 / 겹쳐지는 부분 찾기 문제 자동 생성">
-    <meta property="og:url" content="https://cube.3arch2nd.site">
-    <meta property="og:type" content="website">
+(function () {
+    "use strict";
 
-    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+    const FoldEngine = {};
+    window.FoldEngine = FoldEngine;
 
-    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    let canvas = null;
+    let engine = null;
+    let scene = null;
+    let camera = null;
 
-    <style>
-        body {
-            margin: 0;
-            font-family: 'Gowun Dodum', sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
-            text-align: center;
+    let facesSorted = [];
+    let nodes = [];
+    let netCenter = { x: 0, y: 0 };
+
+    const options = {
+        cellSize: 1.4,
+        backgroundColor: "#ffffff"
+    };
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    FoldEngine.init = function (canvasElement, babylonEngine, babylonScene) {
+        canvas = canvasElement;
+
+        if (babylonEngine && babylonScene) {
+            engine = babylonEngine;
+            scene = babylonScene;
+        } else {
+            engine = new BABYLON.Engine(canvas, true);
+            scene = new BABYLON.Scene(engine);
         }
 
-        h1 {
-            margin-top: 30px;
-            color: #4b8134;
+        setupCamera();
+        setupEnvironment();
+        startRenderLoop();
+    };
+
+    // ============================================================
+    // CAMERA — 위에서 내려다보는 핵심 시점 (ORTHO)
+    // ============================================================
+    function setupCamera() {
+        camera = new BABYLON.FreeCamera(
+            "camera",
+            new BABYLON.Vector3(0, 0, 10),
+            scene
+        );
+
+        camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+
+        const orthoSize = 4.5;
+        camera.orthoLeft   = -orthoSize;
+        camera.orthoRight  =  orthoSize;
+        camera.orthoTop    =  orthoSize;
+        camera.orthoBottom = -orthoSize;
+
+        camera.minZ = -50;
+        camera.maxZ = 1000;
+
+        camera.setTarget(new BABYLON.Vector3(0, 0, 0));
+    }
+
+    // ============================================================
+    // 배경 설정
+    // ============================================================
+    function setupEnvironment() {
+        const bg = BABYLON.Color3.FromHexString(options.backgroundColor);
+        scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1);
+    }
+
+    // ============================================================
+    // loadNet(net)
+    // ============================================================
+    FoldEngine.loadNet = function (net) {
+        disposeAll();
+
+        if (!net || !net.faces) return;
+
+        facesSorted = net.faces.slice();
+
+        computeNetCenter();
+        createFaceMeshes();
+        layoutFlat2D();
+        updateCameraTarget();
+    };
+
+    // ============================================================
+    // disposeAll
+    // ============================================================
+    function disposeAll() {
+        if (nodes && nodes.length) {
+            nodes.forEach(n => n && n.dispose && n.dispose());
         }
+        nodes = [];
+    }
 
-        .container {
-            width: 90%;
-            max-width: 900px;
-            margin: 20px auto;
-            background: #fff;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-        }
+    // ============================================================
+    // center 계산 (좌표 기준점)
+    // ============================================================
+    function computeNetCenter() {
+        let minU = Infinity, maxU = -Infinity;
+        let minV = Infinity, maxV = -Infinity;
 
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            margin: 5px;
-            font-family: inherit;
-        }
+        facesSorted.forEach(f => {
+            minU = Math.min(minU, f.u);
+            maxU = Math.max(maxU, f.u + f.w);
+            minV = Math.min(minV, f.v);
+            maxV = Math.max(maxV, f.v + f.h);
+        });
 
-        .green-btn { background:#92c572; color:white; }
-        .gray-btn { background:#e5e5e5; }
-        .orange-btn { background:#ffc457; }
-        .red-btn { background:#dd6666; color:white; }
+        netCenter.x = (minU + maxU) / 2;
+        netCenter.y = (minV + maxV) / 2;
+    }
 
-        button.selected {
-            background:#ffc107 !important;
-            color:#333 !important;
-            font-weight:bold;
-        }
+    // ============================================================
+    // Mesh 생성 (색, 숨김 등 포함)
+    // ============================================================
+    function createFaceMeshes() {
+        const size = options.cellSize;
 
-        /* 설정 페이지 */
-        .section {
-            margin-top:20px;
-            padding:20px;
-            border-radius:12px;
-            background:#fafafa;
-            border:1px solid #ddd;
-            text-align:center;
-        }
+        facesSorted.forEach(face => {
+            const plane = BABYLON.MeshBuilder.CreatePlane(
+                "face_" + face.id,
+                {
+                    size,
+                    sideOrientation: BABYLON.Mesh.DOUBLESIDE
+                },
+                scene
+            );
 
-        .option-row {
-            display:flex;
-            justify-content:center;
-            flex-wrap:wrap;
-            gap:10px;
-            margin-top:10px;
-        }
+            const mat = new BABYLON.StandardMaterial("mat_" + face.id, scene);
+            const c3  = BABYLON.Color3.FromHexString(face.color || "#cccccc");
 
-        /* 페이지 숨김 */
-        .hidden { display:none !important; }
+            mat.emissiveColor = c3;
+            mat.disableLighting = true;
+            mat.backFaceCulling = false;
 
-        /* 문제 페이지 */
-        .canvas-wrapper {
-            background: #f0f0f0; 
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 10px;
-            margin: 20px auto;
-            display: inline-block; 
-        }
-        
-        #net-canvas {
-            width:350px;
-            height:350px;
-            background:white; /* 캔버스 배경을 흰색으로 명확히 */
-            border:2px solid #333;
-            margin: 0 auto; 
-        }
-        
-        #three-view {
-            width:350px;
-            height:350px;
-            background:#000;
-            margin:20px auto;
-            /* ⭐ 최종 수정: 렌더링 충돌을 막기 위해 GPU 격리 속성 추가 */
-            transform: translateZ(0); 
-            will-change: transform;
-        }
+            // 숨김 처리 ★★★
+            if (face._hidden) {
+                mat.alpha = 0;
+                plane.isPickable = false;
+            }
 
-        /* QR 팝업 */
-        #qr-popup {
-            position:fixed;
-            left:0; top:0;
-            width:100%;
-            height:100%;
-            display:none;
-            align-items:center;
-            justify-content:center;
-            background:rgba(0,0,0,0.5);
-            z-index:1000;
-        }
-        #qr-box {
-            background:white;
-            padding:30px;
-            border-radius:12px;
-            text-align:center;
-        }
+            plane.material = mat;
+            plane.rotationQuaternion = BABYLON.Quaternion.Identity();
+            nodes[face.id] = plane;
+        });
+    }
 
-    </style>
-</head>
+    // ============================================================
+    // 2D (u,v) → Babylon 3D (x,y) 정확 매핑 (좌우/상하 완벽 대응)
+    // ============================================================
+    function layoutFlat2D() {
+        const size = options.cellSize;
 
-<body>
+        facesSorted.forEach(f => {
+            const plane = nodes[f.id];
+            if (!plane) return;
 
-    <h1>입체도형 완전 정복 (정육면체)</h1>
+            // 2D 좌표와 완벽히 일치시키는 핵심 공식 ★★★
+            const x = -(f.u - netCenter.x) * size;
+            const y =  (f.v - netCenter.y) * size;
 
-    <button id="qr-btn" class="gray-btn" style="position:fixed; top:20px; right:20px;">
-        QR 코드
-    </button>
+            plane.position = new BABYLON.Vector3(x, y, 0);
+        });
+    }
 
-    <div class="container">
+    // ============================================================
+    // 카메라 타겟을 전개도 중심에 맞춤 (Babylon 안전 방식)
+    // ============================================================
+    function updateCameraTarget() {
+        if (!camera) return;
 
-        <div id="mode-select-page">
-            <h2>학습 모드를 선택하세요.</h2>
+        const tx = 0;
+        const ty = 0;
 
-            <div class="option-row">
-                <button class="green-btn" id="btn-mode-net">🧩 전개도 완성하기</button>
-                <button class="orange-btn" id="btn-mode-overlap">🎯 겹쳐지는 부분 찾기</button>
-            </div>
-        </div>
+        camera.setTarget(new BABYLON.Vector3(tx, ty, 0));
+    }
 
+    // ============================================================
+    // 접기 기능 스텁 — validator용 그룹 반환
+    // ============================================================
+    FoldEngine.unfoldImmediate = layoutFlat2D;
+    FoldEngine.unfold = layoutFlat2D;
+    FoldEngine.reset = layoutFlat2D;
 
-        <div id="setup-net">
-            <h2>전개도 완성하기 (정육면체) - 설정</h2>
+    FoldEngine.foldImmediate = () => {};
+    FoldEngine.foldTo = () => {};
+    FoldEngine.foldStaticTo = () => {};
+    FoldEngine.foldAnimate = () => Promise.resolve();
+    FoldEngine.showSolvedView = () => Promise.resolve();
 
-            <div class="section hidden">
-                <h3>입체 종류</h3>
-                <div class="option-row" id="net-type-group">
-                    <button data-type="cube" class="gray-btn selected">정육면체</button>
-                </div>
-            </div>
+    FoldEngine.getFaceGroups = () => nodes;
 
-            <div class="section">
-                <h3>진행 방식</h3>
-                <div class="option-row" id="net-run-group">
-                    <button data-run="practice" class="gray-btn">연습</button>
-                    <button data-run="real" class="gray-btn">실전</button>
-                </div>
-            </div>
+    // ============================================================
+    // RENDER LOOP
+    // ============================================================
+    function startRenderLoop() {
+        if (!engine || !scene) return;
 
-            <div class="section">
-                <h3>문제 개수</h3>
-                <div class="option-row">
-                    <button class="gray-btn" id="net-q-minus">-</button>
-                    <span id="net-q-display" style="font-size:22px; margin:0 10px;">10</span>
-                    <button class="gray-btn" id="net-q-plus">+</button>
-                </div>
-            </div>
+        engine.runRenderLoop(() => {
+            scene.render();
+        });
+    }
 
-            <button id="start-net" class="green-btn" style="margin-top:20px;">문제 시작하기</button>
-        </div>
+    FoldEngine.onResize = function () {
+        if (engine) engine.resize();
+    };
 
-
-        <div id="setup-overlap" class="hidden">
-
-            <h2>겹쳐지는 부분 찾기 (정육면체) - 설정</h2>
-
-            <div class="section hidden">
-                <h3>입체 종류</h3>
-                <div class="option-row" id="ov-solid-group">
-                    <button data-solid="cube" class="gray-btn selected">정육면체</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h3>겹침 유형</h3>
-                <div class="option-row" id="ov-type-group">
-                    <button data-type="point" class="gray-btn">점</button>
-                    <button data-type="edge" class="gray-btn">선분</button>
-                    <button data-type="both" class="gray-btn">둘 다</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h3>진행 방식</h3>
-                <div class="option-row" id="ov-run-group">
-                    <button data-run="practice" class="gray-btn">연습</button>
-                    <button data-run="real" class="gray-btn">실전</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h3>문제 개수</h3>
-                <div class="option-row">
-                    <button class="gray-btn" id="ov-q-minus">-</button>
-                    <span id="ov-q-display" style="font-size:22px; margin:0 10px;">10</span>
-                    <button class="gray-btn" id="ov-q-plus">+</button>
-                </div>
-            </div>
-
-            <button id="start-overlap" class="orange-btn" style="margin-top:20px;">문제 시작하기</button>
-
-        </div>
-
-
-        <div id="problem-page" class="hidden">
-            <h2 id="problem-title">문제</h2>
-
-            <div class="canvas-wrapper">
-                <canvas id="net-canvas" width="350" height="350"></canvas>
-            </div>
-            
-            <canvas id="three-view" width="350" height="350" tabindex="1" draggable="false"></canvas>
-
-            <div class="option-row" style="margin-top:20px;">
-                <button id="btn-check" class="green-btn">정답 확인</button>
-                <button id="btn-next" class="orange-btn hidden">다음 문제</button>
-                <button id="btn-exit" class="red-btn">종료</button>
-            </div>
-            </div>
-
-
-        <div id="result-page" class="hidden">
-            <h2>학습 결과</h2>
-            <p>정답률: <span id="result-acc"></span></p>
-
-            <button id="btn-restart" class="green-btn" style="margin-top:20px;">
-                처음으로 돌아가기
-            </button>
-            </div>
-
-    </div>
-
-
-    <div id="qr-popup">
-        <div id="qr-box">
-            <h3>QR 코드</h3>
-            <div id="qr-holder" style="margin-top:15px;"></div>
-
-            <button id="qr-close" class="gray-btn" style="margin-top:20px;">닫기</button>
-        </div>
-    </div>
-
-<script src="https://cdn.babylonjs.com/babylon.js"></script>
-
-<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
-    
-<script src="./js/cube_nets.js"></script>
-
-<script src="./js/ui.js"></script>
-
-<script src="./js/validator.js"></script>
-
-<script src="./js/overlap.js"></script>
-
-<script src="./js/foldEngine.js"></script>
-
-<script src="./js/main.js"></script>
-
-
-
-</body>
-</html>
+})();

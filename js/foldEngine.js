@@ -84,18 +84,19 @@
     // PUBLIC: loadNet(net)
     //   - net.faces: {id,u,v,w,h,color,_hidden?}[]
     // ============================================================
-    FoldEngine.loadNet = async function (net) {
-        disposeAll();
+    FoldEngine.loadNet = function (net) {
+    disposeAll();
+    if (!net || !net.faces) return;
 
-        if (!net || !Array.isArray(net.faces)) return;
+    facesSorted = net.faces.slice();
 
-        // face.id 기준 정렬 (0~5)
-        facesSorted = net.faces.slice().sort((a, b) => a.id - b.id);
+    computeNetCenter();
+    createFaceMeshes();
+    layoutFlat2D();
 
-        computeNetBounds();
-        createFaceMeshes();
-        layoutFlat2D();
-    };
+    updateCameraTarget();  // 도형 중심에 카메라 타겟 이동
+};
+
 
     // ------------------------------------------------------------
     // 모든 Plane 제거

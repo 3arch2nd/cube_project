@@ -43,7 +43,7 @@
         engine = babylonEngine;
         scene = babylonScene;
 
-        setupAndLight();
+        setupCameraAndLight();
         setupEnvironment();
         startRenderLoop();
     };

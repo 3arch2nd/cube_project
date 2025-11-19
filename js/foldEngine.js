@@ -22,6 +22,8 @@
     let canvas = null;
     let camera = null;
     let light = null;
+    let gridMesh = null;
+let groundMesh = null;
 
     // ------------------------------------------------------------
     // 상태 데이터

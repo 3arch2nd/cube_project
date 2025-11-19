@@ -127,6 +127,7 @@
                 if (!faceData) continue; 
 
                 // 2D 펼침 상태에서의 중심 3D 좌표 계산 (XZ 평면에 눕혀진 상태)
+                // (이전 버전의 정확한 2D 위치 계산 로직)
                 const x = (faceData.u + faceData.w / 2 - this.netCenter.x) * size;
                 const z = -(faceData.v + faceData.h / 2 - this.netCenter.y) * size; 
                 const initialWorldPos = new BABYLON.Vector3(x, 0, z);
@@ -155,47 +156,19 @@
                     const parentNode = nodeMap.get(parentConfig.id) || this.baseTransform; 
                     hingeTransform.parent = parentNode;
                     
-                    // Hinge 노드의 로컬 위치 설정 (힌지 모서리 위치)
-                    // Hinge 노드의 position은 Bottom Face를 기준으로 힌지 모서리가 위치해야 하는 로컬 좌표입니다.
-                    hingeTransform.position.copyFrom(config.hingePos);
-                    
-                    // ⭐ 2D 펼침 위치 조정: Hinge Transform의 월드 위치를 2D 펼침 위치로 이동시켜야 합니다.
-                    // Hinge Transform의 최종 로컬 위치 = 2D 펼침 위치 - (Face.localPos) - Parent.WorldPos
-                    
-                    // 펼침 상태에서 Hinge Transform이 부모 노드를 기준으로 펼쳐진 위치에 놓이도록 로컬 좌표를 조정합니다.
-                    
-                    // Face Mesh의 월드 중심 위치 = initialWorldPos
-                    // Hinge Transform의 월드 중심 위치 = Face Mesh의 월드 중심 위치 - Face Mesh의 로컬 위치
-                    // (이 방법은 로컬 좌표계가 꼬일 위험이 있어, 아래의 절대 위치 기준으로 재계산합니다.)
-
-                    // 1. Bottom Face의 World Pos를 기준으로,
-                    // 2. 2D 펼침 상태에서 Hinge 노드의 월드 위치를 계산합니다.
-                    
-                    // 현재 Bottom Face의 Hinge 구조는 (0,0,0)을 기준으로 설정되어 있습니다.
-                    // 모든 힌지 노드의 로컬 위치를 'initialWorldPos - parentWorldPos'로 재조정하여 2D 펼침 상태를 만듭니다.
-                    
+                    // Hinge 노드의 로컬 위치 설정 (2D 펼침 상태)
                     const parentWorldPos = parentNode.getAbsolutePosition();
-                    // 힌지 노드가 2D 펼침 상태에서 Face Mesh의 중심 위치에 오도록 WorldPos를 설정합니다.
-                    const targetHingeWorldPos = initialWorldPos.subtract(config.localOffset);
-                    
-                    // 힌지 Transform의 로컬 위치 = 타겟 월드 위치 - 부모 월드 위치
-                    const finalLocalPos = targetHingeWorldPos.subtract(parentWorldPos);
+                    const targetFaceWorldPos = initialWorldPos.subtract(config.localOffset); 
                     
                     // Hinge Transform의 position에 로컬 위치를 설정합니다.
-                    hingeTransform.position.copyFrom(finalLocalPos);
+                    const finalLocalPos = initialWorldPos.subtract(parentWorldPos).subtract(config.localOffset.scale(-1)); 
+                    hingeTransform.position.copyFrom(finalLocalPos); 
                     
-                    // 마지막으로, 힌지 모서리를 중심으로 회전하도록 Face Mesh의 로컬 위치를 재조정해야 합니다.
-                    // (이 조정은 config.localOffset에서 이미 이루어졌습니다.)
-
                 } else {
                     // Bottom Face (ID 1)는 Base Transform의 자식
                     face.parent = this.baseTransform; 
                     
-                    // ⭐ 중심 조정: 큐브의 (0,0,0)이 화면 중앙에 오도록, Base Transform을 이동시키는 것이 아니라,
-                    // Bottom Face 자체의 위치를 2D 펼침의 중심에 오도록 조정합니다.
-                    
-                    // Bottom Face는 Base Transform의 자식이므로, Base Transform이 (0,0,0)에 있다면,
-                    // Bottom Face가 (-x, -z)로 이동하여 Bottom Face의 중심이 (x, z)에 있던 모든 다른 면들과 함께 중앙에 오도록 합니다.
+                    // Bottom Face를 Base Transform의 로컬 원점 (0,0,0)에 오도록 이동
                     face.position.copyFrom(initialWorldPos.scale(-1)); 
                     nodeMap.set(idNum, face);
                 }
@@ -271,8 +244,10 @@
             // ⭐ ArcRotateCamera (OrbitControls) 생성 및 설정
             this.camera = new BABYLON.ArcRotateCamera(
                 "arcCamera", 
-                Math.PI / 4, // 알파 (수평)
-                Math.PI / 2.5, // 베타 (수직)
+                // ⭐ Alpha (수평): 90도 조정하여 X축을 화면 정면으로 가져옵니다.
+                Math.PI / 2, 
+                // ⭐ Beta (수직): 큐브를 위에서 내려다보는 각도로 명확히 조정
+                Math.PI / 6, // 30도로 설정하여 큐브가 찌그러지지 않고 위에서 내려다보이도록 조정
                 8, // 반경 (radius)
                 BABYLON.Vector3.Zero(), // 타겟 (0,0,0) 
                 this.scene

@@ -1,4 +1,5 @@
-// foldEngine.js (최종 완벽 안정화 코드 - 좌표계 오류 해결)
+// foldEngine.js
+// 큐브 전개도 및 접기 애니메이션 핵심 로직 (Babylon.js 기반) - 최종 완벽 안정화 버전
 
 (function () {
     "use strict";
@@ -59,7 +60,7 @@
                 4: { 
                     key: 'right', parentId: 1, 
                     hingePos: new BABYLON.Vector3(halfSize, 0, 0), 
-                    localOffset: new BABYLON.Vector3(-halfSize, 0, 0), 
+                    localOffset: new BABYLON.Vector3(halfSize, 0, 0), 
                     axis: BABYLON.Vector3.Backward(), angle: Math.PI / 2 
                 },
 
@@ -67,16 +68,16 @@
                 5: { 
                     key: 'left', parentId: 1, 
                     hingePos: new BABYLON.Vector3(-halfSize, 0, 0), 
-                    localOffset: new BABYLON.Vector3(halfSize, 0, 0), 
+                    localOffset: new BABYLON.Vector3(-halfSize, 0, 0), 
                     axis: BABYLON.Vector3.Forward(), angle: Math.PI / 2 
                 },
 
                 // ID 6: Top (Front에 연결)
                 6: { 
                     key: 'top', parentId: 2, 
-                    // Front Face Hinge Transform을 기준으로 Z축을 따라 한 칸 이동한 위치
+                    // Front Hinge Transform을 기준으로 Z축을 따라 한 칸 이동한 위치
                     hingePos: new BABYLON.Vector3(0, 0, FACE_SIZE), 
-                    localOffset: new BABYLON.Vector3(0, 0, -halfSize), 
+                    localOffset: new BABYLON.Vector3(0, 0, halfSize), 
                     axis: BABYLON.Vector3.Right(), 
                     angle: Math.PI / 2 
                 },
@@ -126,6 +127,7 @@
                 if (!faceData) continue; 
 
                 // 2D 펼침 상태에서의 중심 3D 좌표 계산 (XZ 평면에 눕혀진 상태)
+                // 이 좌표는 2D 전개도 상에서 Bottom Face의 중심을 기준으로 한 각 Face의 펼쳐진 중심입니다.
                 const x = (faceData.u + faceData.w / 2 - this.netCenter.x) * size;
                 const z = -(faceData.v + faceData.h / 2 - this.netCenter.y) * size; 
                 const initialWorldPos = new BABYLON.Vector3(x, 0, z);
@@ -140,10 +142,12 @@
                 
                 // 2) Hinge TransformNode 설정 및 연결
                 if (idNum !== 1) {
+                    // --- 힌지 구조 ---
                     const hingeTransform = new BABYLON.TransformNode(`hinge_${config.key}`, this.scene);
                     this.transforms[config.key] = hingeTransform;
 
                     // Face는 Hinge의 자식. Face의 로컬 위치 (펼침 상태의 중심)
+                    // Face Mesh를 Hinge의 로컬 원점 (0,0,0)에서 localOffset만큼 이동시킵니다.
                     face.position.copyFrom(config.localOffset); 
                     face.parent = hingeTransform; 
                     nodeMap.set(idNum, hingeTransform); 
@@ -156,22 +160,22 @@
                     // ⭐ Hinge 노드의 로컬 위치 설정 (핵심 수정)
                     // Hinge 노드가 부모 노드를 기준으로 2D 펼침 위치에 오도록 로컬 좌표를 조정합니다.
                     
-                    const parentWorldPos = parentNode.getAbsolutePosition();
-                    // Hinge Transform의 월드 중심 위치 = Face Mesh의 2D 월드 중심 위치 + Face Mesh의 로컬 위치 오프셋
+                    // Hinge Transform의 월드 위치 = Face Mesh의 2D 펼침 월드 중심 위치 - Face Mesh의 로컬 위치 오프셋
                     const targetHingeWorldPos = initialWorldPos.subtract(config.localOffset);
                     
-                    // Hinge Transform의 position에 로컬 위치를 설정합니다.
+                    // 최종 로컬 위치 = 타겟 월드 위치 - 부모 월드 위치
+                    const parentWorldPos = parentNode.getAbsolutePosition();
                     hingeTransform.position.copyFrom(targetHingeWorldPos.subtract(parentWorldPos)); 
                     
                 } else {
                     // Bottom Face (ID 1)는 Base Transform의 자식
                     face.parent = this.baseTransform; 
                     
-                    // ⭐ Bottom Face의 position을 Base Transform을 기준으로 2D 중심에 오도록 설정
+                    // Bottom Face의 중심이 2D 전개도 상의 중심에 오도록 Base Transform을 이동시킵니다.
                     face.position.copyFrom(initialWorldPos); 
                     nodeMap.set(idNum, face);
 
-                    // Base Transform을 이동시켜 Bottom Face가 월드 (0,0,0)에 오도록 조정
+                    // Base Transform을 이동시켜 Bottom Face의 중심이 월드 (0,0,0)에 오도록 조정
                     this.baseTransform.position.copyFrom(initialWorldPos.scale(-1)); 
                 }
             }

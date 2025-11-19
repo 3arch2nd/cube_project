@@ -171,20 +171,20 @@
     //   ★ 여기에서 좌우/상하가 2D와 100% 동일하도록 단순 매핑
     // ------------------------------------------------------------
     function layoutFlat2D() {
-        const size = options.cellSize;
+    const size = options.cellSize;
 
-        facesSorted.forEach(f => {
-            const plane = nodes[f.id];
-            if (!plane) return;
+    facesSorted.forEach(f => {
+        const plane = nodes[f.id];
+        if (!plane) return;
 
-            // 2D 좌표 그대로 사용 (중심 정렬 말고 “모양/방향” 일치가 목표)
-            const x = f.u * size;      // 오른쪽으로 갈수록 +
-            const y = f.v * size;      // 아래로 갈수록 + (2D 기준)
+        // Babylon 좌표계에 정확히 매칭
+        const x = -f.u * size;   // 좌우 반전 제거
+        const y = -f.v * size;   // 2D와 Babylon의 y축 차이 보정
 
-            // Babylon 은 위가 +Y 이므로 부호만 한 번 뒤집어 줌
-            plane.position = new BABYLON.Vector3(x, -y, 0);
-        });
-    }
+        plane.position = new BABYLON.Vector3(x, y, 0);
+    });
+}
+
 
     // ============================================================
     // 접기 관련 함수들 (현재는 스텁)

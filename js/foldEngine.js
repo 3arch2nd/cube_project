@@ -58,7 +58,7 @@
                 4: { 
                     key: 'right', parentId: 1, 
                     hingePos: new BABYLON.Vector3(halfSize, 0, 0), 
-                    localOffset: new BABYLON.Vector3(halfSize, 0, 0), 
+                    localOffset: new BABYLON.Vector3(-halfSize, 0, 0), 
                     axis: BABYLON.Vector3.Backward(), angle: Math.PI / 2 
                 },
 
@@ -66,7 +66,7 @@
                 5: { 
                     key: 'left', parentId: 1, 
                     hingePos: new BABYLON.Vector3(-halfSize, 0, 0), 
-                    localOffset: new BABYLON.Vector3(-halfSize, 0, 0), 
+                    localOffset: new BABYLON.Vector3(halfSize, 0, 0), 
                     axis: BABYLON.Vector3.Forward(), angle: Math.PI / 2 
                 },
 
@@ -112,8 +112,8 @@
             
             this.baseTransform = new BABYLON.TransformNode("cubeBase", this.scene);
             
-            // ⭐⭐⭐ BASE ROTATION FIX: 시계 반대 방향 90도 회전 적용 (Y축)
-            this.baseTransform.rotation.y = Math.PI / 2; 
+            // ⭐⭐⭐ BASE ROTATION FIX: 180도 회전 적용 (Y축)
+            this.baseTransform.rotation.y = Math.PI; 
             this.baseTransform.position = BABYLON.Vector3.Zero();
 
             const nodeMap = new Map(); 
@@ -126,9 +126,10 @@
                 
                 if (!faceData) continue; 
 
-                // 2D 펼침 상태에서의 중심 3D 좌표 계산 (XZ 평면에 눕혀진 상태)
+                // ⭐ 2D 펼침 상태에서의 중심 3D 좌표 계산 (XZ 평면에 눕혀진 상태)
                 const x = (faceData.u + faceData.w / 2 - this.netCenter.x) * size;
-                const z = -(faceData.v + faceData.h / 2 - this.netCenter.y) * size; 
+                // ⭐ Z축 매핑 수정: Z축 양수 사용 (V 증가 시 Z 증가)
+                const z = (faceData.v + faceData.h / 2 - this.netCenter.y) * size; 
                 const initialWorldPos = new BABYLON.Vector3(x, 0, z);
 
                 
@@ -144,8 +145,8 @@
                     // --- 힌지 구조 ---
                     const hingeTransform = new BABYLON.TransformNode(`hinge_${config.key}`, this.scene);
                     this.transforms[config.key] = hingeTransform;
-                    
-                    // Face는 Hinge의 자식. Face의 로컬 위치를 Hinge 모서리(힌지 원점)에 오도록 조정
+
+                    // Face는 Hinge의 자식. Face의 로컬 위치 (펼침 상태의 중심)
                     face.position.copyFrom(config.localOffset); 
                     face.parent = hingeTransform; 
                     nodeMap.set(idNum, hingeTransform); 
@@ -172,7 +173,6 @@
                     nodeMap.set(idNum, face);
 
                     // Base Transform을 이동시켜 Bottom Face의 중심이 월드 (0,0,0)에 오도록 조정
-                    // baseTransform.rotation.y가 적용되기 전에 위치 조정이 완료됨
                     this.baseTransform.position.copyFrom(initialWorldPos.scale(-1)); 
                 }
             }
@@ -244,11 +244,12 @@
             const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(1, -1, -1), this.scene);
             dirLight.intensity = 0.5;
             
-            // ArcRotateCamera (OrbitControls) 생성 및 설정
+            // ⭐ ArcRotateCamera (OrbitControls) 생성 및 설정
             this.camera = new BABYLON.ArcRotateCamera(
                 "arcCamera", 
+                // Alpha (수평): 0으로 설정하여 큐브의 Z축 방향 정면을 바라봅니다.
                 0, 
-                // Beta (수직) 조정: 0.01 라디안으로 설정하여 큐브를 거의 완벽히 위에서 내려다보도록 함 (시점 유지)
+                // Beta (수직) 조정: 0.01 라디안으로 설정하여 큐브를 거의 완벽히 위에서 내려다보도록 함
                 0.01, 
                 8, // 반경 (radius)
                 BABYLON.Vector3.Zero(), // 타겟 (0,0,0) 

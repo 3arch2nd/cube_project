@@ -1,5 +1,5 @@
 // foldEngine.js
-// 큐브 전개도 및 접기 애니메이션 핵심 로직 (Babylon.js 기반) - 최종 완벽 안정화 버전
+// 큐브 전개도 및 접기 애니메이션 핵심 로직 (Babylon.js 기반) - 최종 완성 및 안정화 버전
 
 (function () {
     "use strict";
@@ -41,40 +41,41 @@
                 // ID 2: Front (Bottom에 연결)
                 2: { 
                     key: 'front', parentId: 1, 
-                    hingePos: new BABYLON.Vector3(0, 0, halfSize), // Bottom의 앞쪽 모서리 (XZ평면 기준)
-                    localOffset: new BABYLON.Vector3(0, 0, -halfSize), // Face Mesh는 힌지 뒤쪽으로 이동
+                    hingePos: new BABYLON.Vector3(0, 0, halfSize), 
+                    localOffset: new BABYLON.Vector3(0, 0, -halfSize), 
                     axis: BABYLON.Vector3.Right(), angle: Math.PI / 2 
                 },
 
                 // ID 3: Back (Bottom에 연결)
                 3: { 
                     key: 'back', parentId: 1, 
-                    hingePos: new BABYLON.Vector3(0, 0, -halfSize), // Bottom의 뒤쪽 모서리
-                    localOffset: new BABYLON.Vector3(0, 0, halfSize), // Face Mesh는 힌지 앞쪽으로 이동
+                    hingePos: new BABYLON.Vector3(0, 0, -halfSize), 
+                    localOffset: new BABYLON.Vector3(0, 0, halfSize), 
                     axis: BABYLON.Vector3.Left(), angle: Math.PI / 2 
                 },
 
                 // ID 4: Right (Bottom에 연결)
                 4: { 
                     key: 'right', parentId: 1, 
-                    hingePos: new BABYLON.Vector3(halfSize, 0, 0), // Bottom의 오른쪽 모서리
-                    localOffset: new BABYLON.Vector3(halfSize, 0, 0), // Face Mesh는 힌지 왼쪽으로 이동 (여전히 헷갈리는 부분, Z축으로 설정하여 큐브가 중앙에 오도록 함)
+                    hingePos: new BABYLON.Vector3(halfSize, 0, 0), 
+                    localOffset: new BABYLON.Vector3(-halfSize, 0, 0), 
                     axis: BABYLON.Vector3.Backward(), angle: Math.PI / 2 
                 },
 
                 // ID 5: Left (Bottom에 연결)
                 5: { 
                     key: 'left', parentId: 1, 
-                    hingePos: new BABYLON.Vector3(-halfSize, 0, 0), // Bottom의 왼쪽 모서리
-                    localOffset: new BABYLON.Vector3(-halfSize, 0, 0), // Face Mesh는 힌지 오른쪽으로 이동
+                    hingePos: new BABYLON.Vector3(-halfSize, 0, 0), 
+                    localOffset: new BABYLON.Vector3(halfSize, 0, 0), 
                     axis: BABYLON.Vector3.Forward(), angle: Math.PI / 2 
                 },
 
                 // ID 6: Top (Front에 연결)
                 6: { 
                     key: 'top', parentId: 2, 
-                    hingePos: new BABYLON.Vector3(0, FACE_SIZE, 0), // Front가 접혔을 때의 상단 모서리 (Front Hinge Transform 기준)
-                    localOffset: new BABBON.Vector3(0, -halfSize, 0), // Face Mesh는 힌지 아래쪽으로 이동 (Front Hinge 기준)
+                    // ⭐ 오타 수정: BABBON -> BABYLON
+                    hingePos: new BABYLON.Vector3(0, FACE_SIZE, 0), 
+                    localOffset: new BABYLON.Vector3(0, -halfSize, 0), 
                     axis: BABYLON.Vector3.Right(), angle: Math.PI / 2 
                 },
             };
@@ -130,7 +131,7 @@
                 
                 // 1) Face Mesh 생성
                 const face = BABYLON.MeshBuilder.CreatePlane(config.key, { size: size }, this.scene);
-                face.rotation.x = Math.PI / 2; // XZ 평면에 눕히기 
+                face.rotation.x = Math.PI / 2; 
                 this.applyMaterial(face, faceColorMap.get(idNum), faceData._hidden);
                 this.faces[config.key] = face;
                 
@@ -151,19 +152,18 @@
                     const parentNode = nodeMap.get(parentConfig.id) || this.baseTransform; 
                     hingeTransform.parent = parentNode;
                     
-                    // Hinge 노드의 로컬 위치 설정 (Hinge의 position은 부모 노드를 기준으로 힌지 모서리가 위치해야 하는 로컬 좌표)
-                    // Hinge 노드의 position을 config.hingePos로 설정 (XZ 평면 모서리 위치)
+                    // Hinge 노드의 로컬 위치 설정 (Hinge 모서리 위치)
+                    // Hinge 노드의 position을 config.hingePos로 설정
                     hingeTransform.position.copyFrom(config.hingePos);
                     
                     // ⭐ 2D 펼침 위치 조정: Hinge Transform의 최종 로컬 위치를 2D 펼침 위치로 이동시켜야 합니다.
                     const parentWorldPos = parentNode.getAbsolutePosition();
                     
-                    // Hinge 노드의 최종 로컬 위치 = Face Mesh의 2D 월드 중심 위치 - Face Mesh의 로컬 위치 오프셋 - 부모의 월드 위치
+                    // Hinge 노드의 월드 중심 위치 = Face Mesh의 월드 중심 위치 - Face Mesh의 로컬 위치 오프셋
                     const targetHingeWorldPos = initialWorldPos.subtract(config.localOffset);
-                    const finalLocalPos = targetHingeWorldPos.subtract(parentWorldPos);
                     
-                    // Hinge Transform의 position에 로컬 위치를 설정합니다.
-                    hingeTransform.position.copyFrom(finalLocalPos); 
+                    // 최종 로컬 위치 = 타겟 월드 위치 - 부모 월드 위치
+                    hingeTransform.position.copyFrom(targetHingeWorldPos.subtract(parentWorldPos)); 
                     
                 } else {
                     // Bottom Face (ID 1)는 Base Transform의 자식

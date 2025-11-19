@@ -198,7 +198,7 @@
         const colorIndex = (typeof f.id === "number")
             ? (f.id % FACE_COLORS.length)
             : 0;
-        const baseFill = FACE_COLORS[colorIndex];
+        const baseFill = f.color || FACE_COLORS[colorIndex];
 
         const finalFill = fill || baseFill;
 

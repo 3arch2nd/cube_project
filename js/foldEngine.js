@@ -1,5 +1,6 @@
 /**
- * foldEngine.js — 2D 전개도와 1:1로 맞춘 Babylon 평면 버전 (최종완성)
+ * foldEngine.js — 2D 전개도와 1:1로 맞춘 Babylon 평면 버전 (색·위치·방향 일치용)
+ * - 접기 애니메이션은 아직 없음 (호환용 스텁만 존재)
  */
 
 (function () {
@@ -48,7 +49,7 @@
         camera.setTarget(new BABYLON.Vector3(0, 0, 0));
         camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
 
-        const orthoSize = 4;
+        const orthoSize = 4; // 전개도 전체가 적당히 보이도록
         camera.orthoLeft   = -orthoSize;
         camera.orthoRight  =  orthoSize;
         camera.orthoTop    =  orthoSize;
@@ -74,7 +75,8 @@
 
         if (!net || !net.faces) return;
 
-        facesSorted = net.faces.slice(); // color 포함한 원본 그대로 유지
+        // CubeNets가 준 순서를 그대로 씀 (id와 color가 이미 맞음)
+        facesSorted = net.faces.slice();
 
         computeNetCenter();
         createFaceMeshes();
@@ -85,11 +87,14 @@
     // CLEANUP
     // ============================================================
     function disposeAll() {
+        if (nodes && nodes.length) {
+            nodes.forEach(n => n && n.dispose && n.dispose());
+        }
         nodes = [];
     }
 
     // ============================================================
-    // CENTER
+    // CENTER (u, v 기준)
     // ============================================================
     function computeNetCenter() {
         let minU = Infinity, maxU = -Infinity;
@@ -107,7 +112,7 @@
     }
 
     // ============================================================
-    // CREATE PLANES (색상 1:1, 좌우뒤집힘 없음)
+    // CREATE PLANES (색 1:1 적용)
     // ============================================================
     function createFaceMeshes() {
         const size = options.cellSize;
@@ -125,34 +130,42 @@
             const mat = new BABYLON.StandardMaterial("mat_" + face.id, scene);
             const c3  = BABYLON.Color3.FromHexString(face.color || "#999999");
 
-            mat.emissiveColor = c3;
+            mat.emissiveColor = c3;               // 조명 영향 X, 색 그대로
             mat.diffuseColor = new BABYLON.Color3(0, 0, 0);
             mat.disableLighting = true;
             mat.backFaceCulling = false;
 
             plane.material = mat;
 
-            // 🔥 좌우뒤집힘 방지 (plane의 기본 UV 방향 보정)
-            plane.rotation = new BABYLON.Vector3(0, Math.PI, 0);
+            // ※ 회전은 일단 0 (정면)
+            plane.rotationQuaternion = BABYLON.Quaternion.Identity();
 
-            // 🔥 nodes를 index가 아니라 id로 정확히 배치
+            // id를 인덱스로 그대로 사용 (빠진 face가 있어도 안전)
             nodes[face.id] = plane;
         });
     }
 
     // ============================================================
-    // POSITION (2D와 동일한 x,y)
+    // 2D (u,v) → 3D (x,y) 배치
+    //
+    //  - 2D:  u 증가 → 오른쪽, v 증가 → 아래
+    //  - 3D:  x 증가 → 왼쪽(고의로 반전), y 증가 → 위
+    //
+    //  => x 에서 netCenter.x - cx 로 좌우 반전을 한 번 더 줘서
+    //     현재 “좌우 뒤집혀 보이는 문제”를 보정
     // ============================================================
     function layoutFlat2D() {
         const size = options.cellSize;
 
         facesSorted.forEach(f => {
             const plane = nodes[f.id];
+            if (!plane) return;
 
             const cx = f.u + f.w / 2;
             const cy = f.v + f.h / 2;
 
-            const x = (cx - netCenter.x) * size;
+            // ★ 좌우 반전 보정: netCenter.x - cx
+            const x = (netCenter.x - cx) * size;
             const y = (netCenter.y - cy) * size;
 
             plane.position = new BABYLON.Vector3(x, y, 0);
@@ -165,6 +178,7 @@
     FoldEngine.unfoldImmediate = layoutFlat2D;
     FoldEngine.unfold = layoutFlat2D;
     FoldEngine.reset = layoutFlat2D;
+
     FoldEngine.foldImmediate = function(){};
     FoldEngine.foldTo = function(){};
     FoldEngine.foldStaticTo = function(){};
@@ -177,7 +191,9 @@
     // RENDER LOOP
     // ============================================================
     function startRenderLoop() {
-        engine.runRenderLoop(() => scene.render());
+        engine.runRenderLoop(() => {
+            scene.render();
+        });
     }
 
     FoldEngine.onResize = function () {

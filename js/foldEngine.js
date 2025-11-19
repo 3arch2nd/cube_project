@@ -1,8 +1,10 @@
 /**
- * foldEngine.js — 2D 전개도와 1:1로 맞춘 Babylon "평면" 버전
+ * foldEngine.js — 디버그 확정 버전 (화면 표시 우선)
  * ------------------------------------------------------------
- * - 2D 전개도와 모양/방향/색이 완전히 동일하게 보이도록만 구현
- * - 접기(fold) 관련 함수는 전부 스텁 (아무 동작 안 함, 에러도 안 냄)
+ * - 2D 전개도와 동일한 위치에 plane을 정확히 표시
+ * - 카메라 오소그래픽 확대
+ * - plane 양면 렌더링
+ * - 디버그 표시 포함
  */
 
 (function () {
@@ -26,8 +28,7 @@
     };
 
     // ============================================================
-    // PUBLIC: init(canvas)
-    // main.js 에서 FoldEngine.init(threeCanvas) 식으로 호출됨
+    // INIT
     // ============================================================
     FoldEngine.init = function (canvasElement) {
         canvas = canvasElement;
@@ -41,22 +42,21 @@
     };
 
     // ============================================================
-    // 카메라: 정면(앞에서 보는) 직교 카메라
-    // X = 오른쪽, Y = 위
+    // CAMERA — 오소그래픽 + 정면
     // ============================================================
     function setupCamera() {
-        // 카메라를 Z축 +쪽에서 원점을 향해 바라보게 함
         camera = new BABYLON.FreeCamera(
             "camera",
             new BABYLON.Vector3(0, 0, 10),
             scene
         );
+
         camera.setTarget(new BABYLON.Vector3(0, 0, 0));
 
-        // 직교(orthographic) 모드 → 기울기/원근감 없음
         camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
 
-        const orthoSize = 5;
+        // 🔥 오소그래픽 영역 크게 — 화면 밖 문제 방지
+        const orthoSize = 20;
         camera.orthoLeft   = -orthoSize;
         camera.orthoRight  =  orthoSize;
         camera.orthoTop    =  orthoSize;
@@ -64,45 +64,56 @@
 
         camera.minZ = 0.1;
         camera.maxZ = 1000;
+
+        // 디버그 카메라 출력
+        console.log("[Camera] pos:", camera.position);
+        console.log("[Camera] target:", camera.getTarget());
+        console.log("[Camera] ortho:", camera.orthoLeft, camera.orthoRight, camera.orthoTop, camera.orthoBottom);
     }
 
     // ============================================================
-    // 배경색만 설정 (조명 없음 = 색 안날아감)
+    // BACKGROUND
     // ============================================================
     function setupEnvironment() {
         const bg = BABYLON.Color3.FromHexString(options.backgroundColor);
-        scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1.0);
+        scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1);
     }
 
     // ============================================================
-    // PUBLIC: loadNet
-    // net = { faces, adjacency, rootIndex }
+    // LOAD NET
     // ============================================================
     FoldEngine.loadNet = function (net) {
-        if (!net || !net.faces) return;
-
         disposeAll();
 
-        // faces 순서는 CubeNets가 준 그대로 사용 (색/배열 유지)
+        if (!net || !net.faces) return;
+
         facesSorted = net.faces.slice();
 
         computeNetCenter();
         createFaceMeshes();
         layoutFlat2D();
+
+        // 🔥 디버그: 원점 빨간점
+        const debug = BABYLON.MeshBuilder.CreateSphere("debug", { diameter: 0.3 }, scene);
+        const dbgMat = new BABYLON.StandardMaterial("dbgMat", scene);
+        dbgMat.emissiveColor = new BABYLON.Color3(1, 0, 0);
+        dbgMat.disableLighting = true;
+        debug.material = dbgMat;
+        debug.position = new BABYLON.Vector3(0, 0, 0);
+
+        console.log("[loadNet] Faces:", facesSorted);
     };
 
-    // ------------------------------------------------------------
-    // meshes 정리
-    // ------------------------------------------------------------
+    // ============================================================
+    // CLEANUP
+    // ============================================================
     function disposeAll() {
-        if (nodes && nodes.length) {
-            nodes.forEach(m => m && m.dispose && m.dispose());
-        }
+        nodes.forEach(n => n.dispose && n.dispose());
         nodes = [];
     }
 
     // ============================================================
-    // 중심 계산 (u, v 기준)
+    // CENTER
     // ============================================================
     function computeNetCenter() {
         let minU = Infinity, maxU = -Infinity;
@@ -117,81 +128,82 @@
 
         netCenter.x = (minU + maxU) / 2;
         netCenter.y = (minV + maxV) / 2;
+
+        console.log("[computeNetCenter] netCenter =", netCenter);
     }
 
     // ============================================================
-    // 면(plane) 생성 — 카메라 정면을 바라보는 평면
+    // CREATE PLANES
     // ============================================================
     function createFaceMeshes() {
-        nodes = [];
-
         const size = options.cellSize;
+        nodes = [];
 
         facesSorted.forEach(face => {
             const plane = BABYLON.MeshBuilder.CreatePlane(
                 "face_" + face.id,
-                { size: size },
+                {
+                    size: size,
+                    sideOrientation: BABYLON.Mesh.DOUBLESIDE // 🔥 양면 렌더링
+                },
                 scene
             );
 
+            // material
             const mat = new BABYLON.StandardMaterial("mat_" + face.id, scene);
+            const c = BABYLON.Color3.FromHexString(face.color || "#999999");
 
-            const hex = face.color || "#cccccc";
-            const c3  = BABYLON.Color3.FromHexString(hex);
-
-            // 조명 영향 없이 깔끔한 색을 위해 emissive만 사용
-            mat.diffuseColor = new BABYLON.Color3(0, 0, 0);
-            mat.emissiveColor = c3;
+            mat.emissiveColor = c; // 🔥 조명 영향 제거
             mat.disableLighting = true;
+            mat.backFaceCulling = false; // 🔥 뒤집힘 방지
 
             plane.material = mat;
-
-            // 카메라를 정면에서 보고 있으므로 별도 회전 필요 없음
             plane.rotationQuaternion = BABYLON.Quaternion.Identity();
 
             nodes.push(plane);
         });
+
+        console.log("[createFaceMeshes] count:", nodes.length);
     }
 
     // ============================================================
-    // 2D 전개도(u,v) → 3D 위치(x,y)
-    //  - u 증가: 오른쪽 → x 증가
-    //  - v 증가: 아래쪽 → y 감소  (그래서 부호 반전)
+    // POSITION PLANES
     // ============================================================
     function layoutFlat2D() {
         const size = options.cellSize;
 
-        facesSorted.forEach((f, i) => {
+        nodes.forEach((plane, i) => {
+            const f = facesSorted[i];
+
             const cx = f.u + f.w / 2;
             const cy = f.v + f.h / 2;
 
             const x = (cx - netCenter.x) * size;
-            const y = (netCenter.y - cy) * size;   // ⬅ v 증가가 아래이므로 부호 반전
+            const y = (netCenter.y - cy) * size;
 
-            nodes[i].position = new BABYLON.Vector3(x, y, 0);
+            plane.position = new BABYLON.Vector3(x, y, 0);
+
+            console.log(`[layout] face ${i}: pos=(${x}, ${y}) color=${f.color}`);
         });
     }
 
     // ============================================================
-    // PUBLIC: unfold / reset (지금은 전개도 평면만 유지)
+    // NO FOLDING — stubs
     // ============================================================
-    FoldEngine.unfoldImmediate = function () {
-        layoutFlat2D();
-    };
+    FoldEngine.unfoldImmediate = function () { layoutFlat2D(); };
     FoldEngine.unfold = FoldEngine.unfoldImmediate;
     FoldEngine.reset = FoldEngine.unfoldImmediate;
 
-    // 접기 관련 API들: main.js Promise 체인 호환용 스텁
     FoldEngine.foldImmediate = function () {};
     FoldEngine.foldTo = function () {};
     FoldEngine.foldStaticTo = function () {};
-    FoldEngine.foldAnimate = function (t) { return Promise.resolve(); };
-    FoldEngine.showSolvedView = function (t) { return Promise.resolve(); };
+    FoldEngine.foldAnimate = async function () {};
+    FoldEngine.showSolvedView = async function () {};
 
-    FoldEngine.getFaceGroups = function () { return nodes; };
+    FoldEngine.getFaceGroups = () => nodes;
 
     // ============================================================
-    // render loop / resize
+    // RENDER LOOP
     // ============================================================
     function startRenderLoop() {
         engine.runRenderLoop(() => {
@@ -199,7 +211,7 @@
         });
     }
 
-    FoldEngine.onResize = function () {
+    FoldEngine.onResize = () => {
         if (engine) engine.resize();
     };
 

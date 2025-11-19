@@ -29,8 +29,6 @@
 
         /**
          * 큐브 접기 시나리오에 따른 각 면의 회전축, 각도, 부모 관계를 정의합니다.
-         * localOffset: Face Mesh가 Hinge Transform의 원점(회전 중심)을 기준으로 이동해야 할 위치입니다.
-         * hingePos: Hinge Transform이 부모 노드를 기준으로 위치해야 할 곳입니다. (펼침 상태에서는 Face Mesh의 중심 위치)
          */
         getFaceConfig(size) {
             const halfSize = size / 2;
@@ -113,6 +111,9 @@
             const faceColorMap = new Map(facesData.map(f => [f.id, BABYLON.Color3.FromHexString(f.color || "#cccccc")]));
             
             this.baseTransform = new BABYLON.TransformNode("cubeBase", this.scene);
+            
+            // ⭐⭐⭐ BASE ROTATION FIX: 시계 반대 방향 90도 회전 적용 (Y축)
+            this.baseTransform.rotation.y = Math.PI / 2; 
             this.baseTransform.position = BABYLON.Vector3.Zero();
 
             const nodeMap = new Map(); 
@@ -155,9 +156,6 @@
                     hingeTransform.parent = parentNode;
                     
                     // ⭐ Hinge 노드의 로컬 위치 설정 (Hinge 모서리 위치)
-                    // Hinge Transform의 position은 Bottom Face를 기준으로 힌지 모서리가 위치해야 하는 로컬 좌표입니다.
-                    // 이 위치가 잘못되어 타일이 겹치고 힌지가 제각각 동작했습니다.
-                    
                     // Hinge Transform의 월드 위치 = Face Mesh의 2D 펼침 월드 중심 위치 - Face Mesh의 로컬 위치 오프셋
                     const targetHingeWorldPos = initialWorldPos.subtract(config.localOffset);
                     
@@ -174,6 +172,7 @@
                     nodeMap.set(idNum, face);
 
                     // Base Transform을 이동시켜 Bottom Face의 중심이 월드 (0,0,0)에 오도록 조정
+                    // baseTransform.rotation.y가 적용되기 전에 위치 조정이 완료됨
                     this.baseTransform.position.copyFrom(initialWorldPos.scale(-1)); 
                 }
             }
@@ -245,12 +244,11 @@
             const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(1, -1, -1), this.scene);
             dirLight.intensity = 0.5;
             
-            // ⭐ ArcRotateCamera (OrbitControls) 생성 및 설정
+            // ArcRotateCamera (OrbitControls) 생성 및 설정
             this.camera = new BABYLON.ArcRotateCamera(
                 "arcCamera", 
-                // Alpha (수평): 0으로 설정하여 큐브의 Z축 방향 정면을 바라봅니다.
                 0, 
-                // ⭐ Beta (수직) 조정: 0.01 라디안으로 설정하여 큐브를 거의 완벽히 위에서 내려다보도록 함
+                // Beta (수직) 조정: 0.01 라디안으로 설정하여 큐브를 거의 완벽히 위에서 내려다보도록 함 (시점 유지)
                 0.01, 
                 8, // 반경 (radius)
                 BABYLON.Vector3.Zero(), // 타겟 (0,0,0) 

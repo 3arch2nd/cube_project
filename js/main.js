@@ -1,8 +1,5 @@
 /**
  * main.js – 정육면체 전개도/겹침 통합 최신 버전 (Babylon.js 대응 수정)
- * - 전개도 완성하기
- * - 겹쳐지는 부분 찾기
- * - ui.js / validator.js / foldEngine.js / overlap.js 와 연동
  */
 
 (function () {
@@ -51,7 +48,7 @@
                 engine = new BABYLON.Engine(threeCanvas, true);
                 scene = new BABYLON.Scene(engine);
 
-                // ⭐ FoldEngine을 Babylon 환경으로 초기화
+                // ⭐ FoldEngine 초기화 및 OrbitCamera 설정
                 FoldEngine.init(threeCanvas, engine, scene); 
 
                 window.addEventListener("resize", () => {
@@ -75,7 +72,7 @@
         bindProblemButtons();
         bindQRPopup();
 
-        // ⭐ 추가: 슬라이더 이벤트 바인딩
+        // ⭐ 슬라이더 이벤트 바인딩
         bindFoldSlider();
 
         // 기본 선택 상태
@@ -91,7 +88,7 @@
 
         showPage("mode-select-page");
         
-        // ⭐ 추가: 슬라이더 제어판 초기 숨김
+        // ⭐ 슬라이더 제어판 초기 숨김
         document.getElementById("fold-control").classList.add("hidden");
     }
 
@@ -392,8 +389,6 @@
                 correct = window.Overlap.checkUserAnswer(netForFold);
             }
 
-            // ⭐ 애니메이션 로직 수정: 슬라이더를 1로 설정하고 검증 결과에 따라 처리합니다.
-            
             // 정답/오답에 관계없이 최종 접힌 모양을 보여줍니다.
             FoldEngine.foldImmediate(); // 3D를 완전히 접힌 상태(t=1)로 즉시 변경
             document.getElementById('fold-slider').value = 1.0;
@@ -452,7 +447,7 @@
     // 결과 페이지
     // ------------------------------------------------
     function showResultPage() {
-        const correctCount = currentIndex; // 추후 정답 개수 별도 집계 가능
+        const correctCount = currentIndex; 
 
         showPage("result-page");
         document.getElementById("result-acc").textContent =

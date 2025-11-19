@@ -109,7 +109,7 @@
         disposeAll();
 
         // id 순으로 정렬해 두면 색/좌표 일관성 유지
-        facesSorted = faces.slice().sort((a, b) => a.id - b.id);
+        facesSorted = faces.slice();
         adjacency = adjFlat || [];
 
         computeNetCenter();

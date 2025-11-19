@@ -163,19 +163,19 @@
     // 2D (u,v) → Babylon 3D (x,y) 정확 매핑 (좌우/상하 완벽 대응)
     // ============================================================
     function layoutFlat2D() {
-        const size = options.cellSize;
+    const size = options.cellSize;
 
-        facesSorted.forEach(f => {
-            const plane = nodes[f.id];
-            if (!plane) return;
+    facesSorted.forEach(f => {
+        const plane = nodes[f.id];
+        if (!plane) return;
 
-            // 2D 좌표와 완벽히 일치시키는 핵심 공식 ★★★
-            const x = -(f.u - netCenter.x) * size;
-            const y =  (f.v - netCenter.y) * size;
+        const x = -(f.u - netCenter.x) * size;
+        const y = -(f.v - netCenter.y) * size;   // ★ 상하 반전 해결
 
-            plane.position = new BABYLON.Vector3(x, y, 0);
-        });
-    }
+        plane.position = new BABYLON.Vector3(x, y, 0);
+    });
+}
+
 
     // ============================================================
     // 카메라 타겟을 전개도 중심에 맞춤 (Babylon 안전 방식)

@@ -294,45 +294,46 @@
      *  - t=1  → 각 면이 parent 기준 90° 접힘
      ************************************************************/
     function setFoldProgress(t) {
-        foldProgress = Math.max(0, Math.min(1, t));
-        const angle = foldProgress * (Math.PI / 2); // 0 ~ 90도
+    foldProgress = Math.max(0, Math.min(1, t));
+    const angle = foldProgress * (Math.PI / 2); // 0~90°
 
-        if (!facesSorted.length) return;
+    if (!facesSorted.length) return;
 
-        // 우선 모든 face의 회전을 identity 로 초기화
-        nodes.forEach(node => {
+    // 모든 회전 초기화
+    nodes.forEach(node => {
+        if (!node) return;
+        node.rotationQuaternion = BABYLON.Quaternion.Identity();
+        node.setPivotPoint(BABYLON.Vector3.Zero());
+    });
+
+    // BFS로 parent → child 순서대로 회전 적용
+    const rootId = facesSorted[0].id;
+    const queue = [rootId];
+    const visited = new Set([rootId]);
+
+    while (queue.length) {
+        const parent = queue.shift();
+
+        hingeInfo.forEach((hinge, id) => {
+            if (!hinge || hinge.parent !== parent) return;
+            if (visited.has(id)) return;
+
+            visited.add(id);
+            queue.push(id);
+
+            const node = nodes[id];
             if (!node) return;
-            node.rotationQuaternion = BABYLON.Quaternion.Identity();
-            node.setPivotPoint(BABYLON.Vector3.Zero());
+
+            node.setPivotPoint(hinge.pivot);
+
+            const q = BABYLON.Quaternion.RotationAxis(hinge.axis, angle);
+            node.rotationQuaternion = q;
         });
-
-        // BFS 순서대로 child에 회전 적용
-        const rootId = facesSorted[0].id;
-        const queue = [rootId];
-        const visited = new Set([rootId]);
-
-        while (queue.length) {
-            const parentId = queue.shift();
-
-            hingeInfo.forEach((hinge, id) => {
-                if (!hinge || hinge.parent !== parentId) return;
-                if (visited.has(id)) return;
-
-                visited.add(id);
-                queue.push(id);
-
-                const node = nodes[id];
-                if (!node) return;
-
-                // 힌지(경첩) 설정
-                node.setPivotPoint(hinge.pivot);
-
-                // 축(axis)과 각도로 quaternion 생성
-                const q = BABYLON.Quaternion.RotationAxis(hinge.axis, angle);
-                node.rotationQuaternion = q;
-            });
-        }
     }
+
+    // ❌ layoutFlat() 호출하면 안 됨
+}
+
 
     /************************************************************
      * 외부 API (main.js에서 호출)

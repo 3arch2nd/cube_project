@@ -192,28 +192,42 @@
      * 평면 배치 (★ ROOT ANCHORED VERSION, 100% 정렬)
      ************************************************************/
     function layoutFlat() {
-        const S = options.cellSize;
+    const S = options.cellSize;
+    
+    // 모든 face의 3D 중심 누적
+    let sumX = 0, sumY = 0, count = 0;
 
-        const root = facesSorted.find(f => f.id === 0);
-        const rootCenterX = root.u + root.w / 2;
-        const rootCenterY = root.v + root.h / 2;
+    facesSorted.forEach(f => {
+        const node = nodes[f.id];
+        if (!node) return;
 
-        facesSorted.forEach(f => {
-            const node = nodes[f.id];
-            if (!node) return;
+        // 2D 중심
+        const cx = f.u + f.w / 2;
+        const cy = f.v + f.h / 2;
 
-            const cx = f.u + f.w / 2;
-            const cy = f.v + f.h / 2;
+        // 3D 좌표 변환
+        const x = (cx - netCenter.x) * S;
+        const y = (netCenter.y - cy) * S;
 
-            const x = (cx - rootCenterX) * S;
-            const y = (rootCenterY - cy) * S;
+        // 배치
+        node.position = new BABYLON.Vector3(x, y, 0);
+        node.rotationQuaternion = BABYLON.Quaternion.Identity();
 
-            node.position = new BABYLON.Vector3(x, y, 0);
-            node.rotationQuaternion = BABYLON.Quaternion.Identity();
-        });
+        // 중심 누적 계산
+        sumX += x;
+        sumY += y;
+        count++;
+    });
 
-        camera.target = new BABYLON.Vector3(0, 0, 0);
+    // ⭐ 전개도 3D 중심 (평균값)
+    const centerX = sumX / count;
+    const centerY = sumY / count;
+
+    // ⭐ 카메라가 항상 전개도 중심을 보도록 자동 조절
+    if (camera) {
+        camera.target = new BABYLON.Vector3(centerX, centerY, 0);
     }
+
 
     /************************************************************
      * foldProgress — 현재는 평면 고정

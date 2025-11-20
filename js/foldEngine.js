@@ -210,9 +210,24 @@
             minV=Math.min(minV, f.v);
             maxV=Math.max(maxV, f.v+f.h);
         });
-        netCenter.x = (minU+maxU)/2;
-        netCenter.y = (minV+maxV)/2;
-    }
+        function layoutFlat() {
+    const S = options.cellSize;
+
+    facesSorted.forEach(f => {
+        const node = nodes[f.id];
+
+        // 2D 좌표를 그대로 3D에 반영 (좌상단 기준)
+        const x = (f.u - netCenter.x) * S;
+        const y = (netCenter.y - f.v) * S;
+
+        node.position = new BABYLON.Vector3(x, y, 0);
+        node.rotationQuaternion = BABYLON.Quaternion.Identity();
+    });
+
+    // 카메라도 전개도 중심을 보도록
+    if (camera) camera.target = new BABYLON.Vector3(0, 0, 0);
+}
+
 
     function layoutFlat() {
         const S = options.cellSize;

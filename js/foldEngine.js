@@ -1,7 +1,22 @@
 /************************************************************
- * foldEngine.js — 평면 매핑 + 힌지 회전(1단계 구현)
+ * foldEngine.js — 정육면체 전개도 Fold 엔진 (1차 완성본)
  *  - 2D 전개도와 3D 평면 배치 100% 정렬
- *  - hingeInfo 기반으로 foldProgress(0~1)에 따라 회전
+ *  - adjacency 정보를 이용해 힌지 트리(parent-child) 구성
+ *  - foldProgress(0~1)에 따라 0°→90° 접기
+ *  - ArcRotateCamera로 회전 가능
+ *
+ *  외부에서 사용하는 API:
+ *    FoldEngine.init(canvas, engine?, scene?)
+ *    FoldEngine.loadNet(net)           // net.faces[], net.adjacency[]
+ *    FoldEngine.setFoldProgress(t)     // 0~1 (html에서 직접 사용)
+ *    FoldEngine.unfoldImmediate()
+ *    FoldEngine.foldImmediate()
+ *    FoldEngine.foldTo(t)
+ *    FoldEngine.foldStaticTo(rad)
+ *    FoldEngine.foldAnimate()
+ *    FoldEngine.showSolvedView()
+ *    FoldEngine.getFaceGroups()
+ *    FoldEngine.onResize()
  ************************************************************/
 
 (function () {
@@ -15,10 +30,10 @@
     let scene = null;
     let camera = null;
 
-    let facesSorted = [];
-    let nodes = [];          // face.id → TransformNode
-    let hingeInfo = [];      // face.id → { parent, axis, pivot }
-    let netCenter = { x: 0, y: 0 };
+    let facesSorted = [];      // id 오름차순 faces
+    let nodes = [];            // face.id → TransformNode (plane의 parent)
+    let hingeInfo = [];        // face.id → { parent, axis, pivot }
+    let netCenter = { x: 0, y: 0 };  // 전개도 중심(셀 좌표계)
 
     const options = {
         cellSize: 1,
@@ -45,6 +60,7 @@
         setupEnvironment();
         startRenderLoop();
 
+        // 외부 슬라이더에서 직접 호출
         FoldEngine.setFoldProgress = setFoldProgress;
     };
 
@@ -73,16 +89,14 @@
         disposeAll();
         if (!net || !net.faces) return;
 
+        // id 순으로 정렬 (항상 0~5 가정)
         facesSorted = net.faces.slice().sort((a, b) => a.id - b.id);
-        computeNetCenter(net.faces);
 
+        computeNetCenter(facesSorted);
         createMeshes();
         buildHingeTree(net.adjacency || []);
 
-        // 평면 상태로 위치 잡기 (한 번만)
-        layoutFlat();
-
-        // 최초 상태: 펼쳐진 상태
+        // 처음에는 완전히 펼친 상태
         setFoldProgress(0);
     };
 
@@ -92,10 +106,11 @@
         }
         nodes = [];
         hingeInfo = [];
+        facesSorted = [];
     }
 
     /************************************************************
-     * 전개도 중심 계산
+     * 전개도 중심 계산 (셀 좌표계)
      ************************************************************/
     function computeNetCenter(faces) {
         let minU = Infinity, maxU = -Infinity;
@@ -113,7 +128,7 @@
     }
 
     /************************************************************
-     * 메쉬 생성
+     * 메쉬 생성 (plane + parent TransformNode)
      ************************************************************/
     function createMeshes() {
         facesSorted.forEach(face => {
@@ -137,7 +152,7 @@
 
             plane.material = mat;
 
-            // 회전용 부모 노드
+            // 회전/이동은 TransformNode에서 처리
             const tnode = new BABYLON.TransformNode("node_" + face.id, scene);
             plane.parent = tnode;
 
@@ -146,19 +161,45 @@
     }
 
     /************************************************************
-     * BFS hinge tree (parent / axis / pivot + parent-child 연결)
+     * BFS 기반 hinge 트리 구성 + 평면 위치 설정
+     *  - rootId (기본 0)를 기준으로 parent-child 지정
+     *  - 각 child의 local position은 parent 대비 offset으로 설정
      ************************************************************/
     function buildHingeTree(adjList) {
         if (!facesSorted.length) return;
 
-        const visited = new Set([0]);
-        const queue = [0];
+        const S = options.cellSize;
+        hingeInfo = [];
 
-        hingeInfo[0] = { parent: null, axis: null, pivot: null };
+        // id → face 빠른 lookup
+        const faceById = {};
+        facesSorted.forEach(f => faceById[f.id] = f);
+
+        const rootId = facesSorted[0].id;   // 보통 0
+        const rootFace = faceById[rootId];
+        const rootNode = nodes[rootId];
+
+        // root 의 world 위치: 이전에 쓰던 공식 그대로
+        const rootCx = rootFace.u + rootFace.w / 2;
+        const rootCy = rootFace.v + rootFace.h / 2;
+        const rootX  = (rootCx - netCenter.x) * S;
+        const rootY  = (netCenter.y - rootCy) * S;
+
+        rootNode.parent = null;
+        rootNode.position = new BABYLON.Vector3(rootX, rootY, 0);
+        rootNode.rotationQuaternion = BABYLON.Quaternion.Identity();
+
+        hingeInfo[rootId] = { parent: null, axis: null, pivot: null };
+
+        const visited = new Set([rootId]);
+        const queue = [rootId];
 
         while (queue.length) {
-            const parentId = queue.shift();
+            const parentId   = queue.shift();
+            const parentFace = faceById[parentId];
+            const parentNode = nodes[parentId];
 
+            // parent와 인접한 child 들
             adjList
                 .filter(a => a.from === parentId)
                 .forEach(a => {
@@ -168,66 +209,79 @@
                     visited.add(childId);
                     queue.push(childId);
 
-                    const parent = facesSorted.find(f => f.id === parentId);
-                    const child  = facesSorted.find(f => f.id === childId);
+                    const childFace = faceById[childId];
+                    const childNode = nodes[childId];
 
-                    const hinge = computeHinge(parent, child);
-                    hingeInfo[childId] = {
-                        parent: parentId,
-                        axis: hinge.axis,
-                        pivot: hinge.pivot
-                    };
+                    // hinge axis/pivot 계산 (로컬 좌표계)
+                    const hinge = computeHinge(parentFace, childFace);
+                    hinge.parent = parentId;
+                    hingeInfo[childId] = hinge;
+
+                    // parent 대비 child 중심 offset (셀 좌표 → 3D)
+                    const pCx = parentFace.u + parentFace.w / 2;
+                    const pCy = parentFace.v + parentFace.h / 2;
+                    const cCx = childFace.u + childFace.w / 2;
+                    const cCy = childFace.v + childFace.h / 2;
+
+                    const dxCells = cCx - pCx;       // 오른쪽이 +
+                    const dyCells = cCy - pCy;       // 아래가 + (2D 기준)
+
+                    const localX = dxCells * S;
+                    const localY = -dyCells * S;     // 3D에서는 위가 +
+
+                    childNode.parent = parentNode;
+                    childNode.position = new BABYLON.Vector3(localX, localY, 0);
+                    childNode.rotationQuaternion = BABYLON.Quaternion.Identity();
                 });
         }
 
-        // 실제 TransformNode 계층 구조로 parent-child 적용
-        facesSorted.forEach(f => {
-            const h = hingeInfo[f.id];
-            if (!h || h.parent == null) return;
-            const parentNode = nodes[h.parent];
-            const node       = nodes[f.id];
-            if (parentNode && node) {
-                node.parent = parentNode;
-            }
-        });
+        // 카메라가 대략 전개도 중심을 보도록 (root가 이미 중심에 가까움)
+        if (camera) {
+            camera.target = new BABYLON.Vector3(0, 0, 0);
+        }
 
+        // 디버그용
         console.log("HINGE INFO:", hingeInfo);
     }
 
+    /************************************************************
+     * hinge 계산 (parent / child 의 상대 위치만으로 축/피벗 결정)
+     *  - pivot 은 TransformNode 로컬 좌표계에서 edge 중심을 기준으로 함
+     ************************************************************/
     function computeHinge(parent, child) {
         const S = options.cellSize;
 
-        // 위/아래/좌/우에 따라 축과 피벗 결정 (2D 기준)
+        // child 가 parent 의 어느 방향에 붙어있는지
         if (child.v === parent.v - 1) {
-            // 위쪽
+            // child ↑ parent (위)
             return {
-                axis:  new BABYLON.Vector3(1, 0, 0),
-                pivot: new BABYLON.Vector3(0,  S / 2, 0)
+                axis:  new BABYLON.Vector3(1, 0, 0),     // X축 회전
+                pivot: new BABYLON.Vector3(0,  S / 2, 0) // 윗변
             };
         }
         if (child.v === parent.v + 1) {
-            // 아래쪽
+            // child ↓ parent (아래)
             return {
                 axis:  new BABYLON.Vector3(1, 0, 0),
                 pivot: new BABYLON.Vector3(0, -S / 2, 0)
             };
         }
         if (child.u === parent.u - 1) {
-            // 왼쪽
+            // child ← parent (왼쪽)
             return {
-                axis:  new BABYLON.Vector3(0, 1, 0),
+                axis:  new BABYLON.Vector3(0, 1, 0),     // Y축 회전
                 pivot: new BABYLON.Vector3(-S / 2, 0, 0)
             };
         }
         if (child.u === parent.u + 1) {
-            // 오른쪽
+            // child → parent (오른쪽)
             return {
                 axis:  new BABYLON.Vector3(0, 1, 0),
                 pivot: new BABYLON.Vector3( S / 2, 0, 0)
             };
         }
 
-        // 인접하지 않는 경우 (이상한 케이스) → 회전 없음
+        // 이 경우는 거의 없지만, 안전용 기본값
         return {
             axis:  new BABYLON.Vector3(0, 0, 0),
             pivot: new BABYLON.Vector3(0, 0, 0)
@@ -235,65 +289,33 @@
     }
 
     /************************************************************
-     * 평면 배치 + 카메라 중심 맞추기
-     ************************************************************/
-    function layoutFlat() {
-        const S = options.cellSize;
-
-        let sumX = 0, sumY = 0, count = 0;
-
-        facesSorted.forEach(f => {
-            const node = nodes[f.id];
-            if (!node) return;
-
-            const cx = f.u + f.w / 2;
-            const cy = f.v + f.h / 2;
-
-            const x = (cx - netCenter.x) * S;
-            const y = (netCenter.y - cy) * S;
-
-            node.position = new BABYLON.Vector3(x, y, 0);
-            // 평면 기본 상태: 회전 없음
-            node.rotationQuaternion = BABYLON.Quaternion.Identity();
-            node.setPivotPoint(BABYLON.Vector3.Zero());
-
-            sumX += x;
-            sumY += y;
-            count++;
-        });
-
-        const centerX = sumX / count;
-        const centerY = sumY / count;
-
-        if (camera) {
-            camera.target = new BABYLON.Vector3(centerX, centerY, 0);
-        }
-    }
-
-    /************************************************************
-     * foldProgress — 회전 적용 (HINGE 적용)
+     * foldProgress — parent-child 힌지 회전 적용
+     *  - t=0  → 평면 전개도
+     *  - t=1  → 각 면이 parent 기준 90° 접힘
      ************************************************************/
     function setFoldProgress(t) {
         foldProgress = Math.max(0, Math.min(1, t));
-        const angle = foldProgress * (Math.PI / 2); // 0~90°
+        const angle = foldProgress * (Math.PI / 2); // 0 ~ 90도
 
-        // 먼저 모든 노드의 회전/피벗 초기화
-        facesSorted.forEach(f => {
-            const node = nodes[f.id];
+        if (!facesSorted.length) return;
+
+        // 우선 모든 face의 회전을 identity 로 초기화
+        nodes.forEach(node => {
             if (!node) return;
             node.rotationQuaternion = BABYLON.Quaternion.Identity();
             node.setPivotPoint(BABYLON.Vector3.Zero());
         });
 
-        // root(0)는 회전 없음
-        const queue = [0];
-        const visited = new Set([0]);
+        // BFS 순서대로 child에 회전 적용
+        const rootId = facesSorted[0].id;
+        const queue = [rootId];
+        const visited = new Set([rootId]);
 
         while (queue.length) {
-            const parent = queue.shift();
+            const parentId = queue.shift();
 
             hingeInfo.forEach((hinge, id) => {
-                if (!hinge || hinge.parent !== parent) return;
+                if (!hinge || hinge.parent !== parentId) return;
                 if (visited.has(id)) return;
 
                 visited.add(id);
@@ -302,21 +324,18 @@
                 const node = nodes[id];
                 if (!node) return;
 
-                // 힌지 피벗 설정 (부모 좌표계 기준)
+                // 힌지(경첩) 설정
                 node.setPivotPoint(hinge.pivot);
 
-                // 회전축 quaternion 적용
+                // 축(axis)과 각도로 quaternion 생성
                 const q = BABYLON.Quaternion.RotationAxis(hinge.axis, angle);
                 node.rotationQuaternion = q;
             });
         }
-
-        // 위치는 layoutFlat()에서 이미 한 번 잡았으므로
-        // 여기서는 다시 호출하지 않는다 (회전값이 덮어쓰이지 않도록).
     }
 
     /************************************************************
-     * 외부 API
+     * 외부 API (main.js에서 호출)
      ************************************************************/
     FoldEngine.unfoldImmediate = () => setFoldProgress(0);
     FoldEngine.foldImmediate   = () => setFoldProgress(1);
@@ -327,11 +346,13 @@
     FoldEngine.getFaceGroups   = () => nodes;
 
     /************************************************************
-     * Babylon Loop
+     * Babylon render loop
      ************************************************************/
     function startRenderLoop() {
         if (!engine || !scene) return;
-        engine.runRenderLoop(() => scene.render());
+        engine.runRenderLoop(() => {
+            scene.render();
+        });
     }
 
     FoldEngine.onResize = () => {

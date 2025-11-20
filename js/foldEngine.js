@@ -211,23 +211,22 @@
     }
 
     function layoutFlat() {
-        const S = options.cellSize;
+    const S = options.cellSize;
 
-        facesSorted.forEach(f => {
-            const node = nodes[f.id];
+    facesSorted.forEach(f => {
+        const node = nodes[f.id];
 
-            const cx = f.u + f.w/2;
-            const cy = f.v + f.h/2;
+        // 2D 좌표 그대로 배치 (좌우/상하 100% 동일)
+        const x = f.u * S;
+        const y = -f.v * S;
 
-            const x = (cx - netCenter.x) * S;
-            const y = (netCenter.y - cy) * S;
+        node.position = new BABYLON.Vector3(x, y, 0);
+        node.rotationQuaternion = BABYLON.Quaternion.Identity();
+    });
 
-            node.position = new BABYLON.Vector3(x,y,0);
-            node.rotationQuaternion = BABYLON.Quaternion.Identity();
-        });
+    if (camera) camera.target = new BABYLON.Vector3(0, 0, 0);
+}
 
-        if (camera) camera.target = new BABYLON.Vector3(0,0,0);
-    }
 
     /************************************************************
      * 아직 회전은 없음

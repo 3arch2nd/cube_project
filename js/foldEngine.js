@@ -1,6 +1,10 @@
 /************************************************************
- * foldEngine.js — 2단계 A단계 (힌지 축/피벗 계산만, 회전 없음)
+ * foldEngine.js — 평면 매핑 + 힌지 접기 (Babylon)
+ *  - 2D 전개도와 3D 전개도 좌표/색 100% 일치
+ *  - net.adjacency의 dir(up/down/left/right)을 이용해 힌지 축 계산
+ *  - foldProgress(0~1)에 따라 0°→90°까지 회전
  ************************************************************/
+
 (function () {
     "use strict";
 
@@ -12,17 +16,16 @@
     let scene = null;
     let camera = null;
 
-    let facesSorted = [];
-    let nodes = [];
-    let netCenter = { x: 0, y: 0 };
-    let hingeInfo = [];    
+    let facesSorted = [];          // id 순 정렬된 face 배열
+    let nodes = [];                // face.id -> TransformNode
+    let hingeInfo = [];            // face.id -> { parent, axis, pivot }
 
     const options = {
         cellSize: 1,
         backgroundColor: "#ffffff"
     };
 
-    let foldProgress = 0;
+    let foldProgress = 0;          // 0 = 펼침, 1 = 완전 접힘
 
     /************************************************************
      * INIT
@@ -32,10 +35,10 @@
 
         if (eng && scn) {
             engine = eng;
-            scene = scn;
+            scene  = scn;
         } else {
             engine = new BABYLON.Engine(canvas, true);
-            scene = new BABYLON.Scene(engine);
+            scene  = new BABYLON.Scene(engine);
         }
 
         setupCamera();
@@ -46,19 +49,27 @@
     function setupCamera() {
         camera = new BABYLON.ArcRotateCamera(
             "cubeCam",
-            -Math.PI / 2,
-            Math.PI / 2.2,
+            -Math.PI / 2,       // 왼쪽에서 시작
+            Math.PI / 2.1,      // 거의 위에서 내려다보는 각도
             8,
             new BABYLON.Vector3(0, 0, 0),
             scene
         );
         camera.attachControl(canvas, true);
+        camera.lowerRadiusLimit = 3;
+        camera.upperRadiusLimit = 20;
     }
 
     function setupEnvironment() {
         const bg = BABYLON.Color3.FromHexString(options.backgroundColor);
         scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1);
-        new BABYLON.HemisphericLight("h", new BABYLON.Vector3(0,1,0), scene);
+
+        const light = new BABYLON.HemisphericLight(
+            "hemi",
+            new BABYLON.Vector3(0, 1, 0),
+            scene
+        );
+        light.intensity = 0.8;
     }
 
     /************************************************************
@@ -68,39 +79,41 @@
         disposeAll();
         if (!net || !net.faces) return;
 
-        facesSorted = net.faces.slice().sort((a,b)=>a.id-b.id);
-        computeNetCenter();
+        // id 순 정렬
+        facesSorted = net.faces.slice().sort((a, b) => a.id - b.id);
+
         createMeshes();
         buildHingeTree(net.adjacency || []);
-        layoutFlat();
-        setFoldProgress(0);
-
-        console.log("HINGE INFO:", hingeInfo);
+        layoutFlat();          // 2D와 동일한 평면 배치
+        setFoldProgress(0);    // 항상 펼친 상태로 시작
     };
 
     function disposeAll() {
-        nodes.forEach(n => n?.dispose?.());
+        if (nodes && nodes.length) {
+            nodes.forEach(n => n && n.dispose && n.dispose());
+        }
         nodes = [];
         hingeInfo = [];
     }
 
     /************************************************************
-     * Mesh 생성
+     * 메쉬 생성 (face별 TransformNode + Plane)
      ************************************************************/
     function createMeshes() {
         facesSorted.forEach(face => {
             const size = options.cellSize;
+
             const plane = BABYLON.MeshBuilder.CreatePlane(
-                "face_"+face.id,
+                "face_" + face.id,
                 { size: size, sideOrientation: BABYLON.Mesh.DOUBLESIDE },
                 scene
             );
 
-            const mat = new BABYLON.StandardMaterial("mat_"+face.id, scene);
+            const mat = new BABYLON.StandardMaterial("mat_" + face.id, scene);
             const col = face.color || "#999999";
             mat.emissiveColor = BABYLON.Color3.FromHexString(col);
-            mat.backFaceCulling = false;
             mat.disableLighting = true;
+            mat.backFaceCulling = false;
 
             if (face._hidden) {
                 mat.alpha = 0.0;
@@ -109,23 +122,29 @@
 
             plane.material = mat;
 
-            const tnode = new BABYLON.TransformNode("node_"+face.id, scene);
+            // 회전/이동을 담당하는 부모 노드
+            const tnode = new BABYLON.TransformNode("node_" + face.id, scene);
             plane.parent = tnode;
+
+            // plane은 부모 중심에 그대로 놓기
+            plane.position = new BABYLON.Vector3(0, 0, 0);
 
             nodes[face.id] = tnode;
         });
     }
 
     /************************************************************
-     * parent-child hinge tree
+     * parent-child 트리 + 힌지 축 계산
      ************************************************************/
     function buildHingeTree(adjList) {
         if (!facesSorted.length) return;
 
-        const visited = new Set([0]);
-        const queue = [0];
+        // root = id 0
+        const ROOT_ID = 0;
+        const visited = new Set([ROOT_ID]);
+        const queue = [ROOT_ID];
 
-        hingeInfo[0] = { parent: null, axis: null, pivot: null };
+        hingeInfo[ROOT_ID] = { parent: null, axis: null, pivot: null };
 
         while (queue.length) {
             const parentId = queue.shift();
@@ -138,11 +157,7 @@
                 visited.add(childId);
                 queue.push(childId);
 
-                const parent = facesSorted.find(f => f.id === parentId);
-                const child = facesSorted.find(f => f.id === childId);
-
-                const hinge = computeHinge(parent, child);
-
+                const hinge = computeHingeFromDir(a.dir);
                 hingeInfo[childId] = {
                     parent: parentId,
                     axis: hinge.axis,
@@ -151,103 +166,159 @@
             });
         }
 
-        // 트리 구조 연결
+        // 실제 TransformNode 트리 구성 + 피벗 설정
         facesSorted.forEach(face => {
-            if (face.id === 0) return;
+            const id = face.id;
+            if (id === ROOT_ID) return;
 
-            const h = hingeInfo[face.id];
+            const h = hingeInfo[id];
             if (!h) return;
 
-            nodes[face.id].parent = nodes[h.parent];
+            const parentNode = nodes[h.parent];
+            const node       = nodes[id];
+
+            node.parent = parentNode;
+            node.setPivotPoint(h.pivot);
         });
+
+        // 디버깅용
+        console.log("HINGE INFO:", hingeInfo);
     }
 
-    /************************************************************
-     * HINGE 계산 (방향 기반)
-     ************************************************************/
-    function computeHinge(parent, child) {
+    // adjacency.dir 기준으로 축/피벗 계산
+    function computeHingeFromDir(dir) {
         const S = options.cellSize;
-        let axis = new BABYLON.Vector3(0,0,0);
-        let pivot = new BABYLON.Vector3(0,0,0);
-
-        // child가 parent 위
-        if (child.v === parent.v - 1) {
-            axis = new BABYLON.Vector3(1,0,0);
-            pivot = new BABYLON.Vector3(0, S/2, 0);
+        switch (dir) {
+            case "up":       // child가 parent 위쪽 (v-1)
+                return {
+                    axis:  new BABYLON.Vector3(1, 0, 0),      // x축 회전
+                    pivot: new BABYLON.Vector3(0, -S / 2, 0)  // child의 아래쪽 변
+                };
+            case "down":     // child가 parent 아래쪽 (v+1)
+                return {
+                    axis:  new BABYLON.Vector3(-1, 0, 0),     // 반대 방향
+                    pivot: new BABYLON.Vector3(0,  S / 2, 0)  // child의 위쪽 변
+                };
+            case "left":     // child가 parent 왼쪽 (u-1)
+                return {
+                    axis:  new BABYLON.Vector3(0, -1, 0),     // y축 회전
+                    pivot: new BABYLON.Vector3(S / 2, 0, 0)   // child의 오른쪽 변
+                };
+            case "right":    // child가 parent 오른쪽 (u+1)
+                return {
+                    axis:  new BABYLON.Vector3(0, 1, 0),
+                    pivot: new BABYLON.Vector3(-S / 2, 0, 0)  // child의 왼쪽 변
+                };
+            default:
+                return {
+                    axis:  new BABYLON.Vector3(0, 0, 0),
+                    pivot: new BABYLON.Vector3(0, 0, 0)
+                };
         }
-        // child가 parent 아래
-        else if (child.v === parent.v + 1) {
-            axis = new BABYLON.Vector3(1,0,0);
-            pivot = new BABYLON.Vector3(0, -S/2, 0);
-        }
-        // child가 parent 왼쪽
-        else if (child.u === parent.u - 1) {
-            axis = new BABYLON.Vector3(0,1,0);
-            pivot = new BABYLON.Vector3(-S/2, 0, 0);
-        }
-        // child가 parent 오른쪽
-        else if (child.u === parent.u + 1) {
-            axis = new BABYLON.Vector3(0,1,0);
-            pivot = new BABYLON.Vector3(S/2, 0, 0);
-        }
-
-        return { axis, pivot };
     }
 
     /************************************************************
-     * 평면 배치
+     * 평면 배치 (2D 전개도와 1:1 매핑)
      ************************************************************/
-    function computeNetCenter() {
-        let minU=999, maxU=-999, minV=999, maxV=-999;
-        facesSorted.forEach(f=>{
-            minU=Math.min(minU, f.u);
-            maxU=Math.max(maxU, f.u+f.w);
-            minV=Math.min(minV, f.v);
-            maxV=Math.max(maxV, f.v+f.h);
+    function layoutFlat() {
+        const S = options.cellSize;
+
+        facesSorted.forEach(f => {
+            const node = nodes[f.id];
+            if (!node) return;
+
+            // 2D 좌표 (u,v)를 그대로 3D (x,y)에 반영
+            const x = f.u * S;
+            const y = -f.v * S;
+
+            node.position = new BABYLON.Vector3(x, y, 0);
+            node.rotationQuaternion = BABYLON.Quaternion.Identity();
         });
 
-        netCenter.x = (minU + maxU) / 2;
-        netCenter.y = (minV + maxV) / 2;
+        if (camera) {
+            camera.target = new BABYLON.Vector3(0, 0, 0);
+        }
     }
 
-    function layoutFlat() {
-    const S = options.cellSize;
-
-    facesSorted.forEach(f => {
-        const node = nodes[f.id];
-
-        // 2D 좌표 그대로 배치 (좌우/상하 100% 동일)
-        const x = f.u * S;
-        const y = -f.v * S;
-
-        node.position = new BABYLON.Vector3(x, y, 0);
-        node.rotationQuaternion = BABYLON.Quaternion.Identity();
-    });
-
-    if (camera) camera.target = new BABYLON.Vector3(0, 0, 0);
-}
-
-
     /************************************************************
-     * 아직 회전은 없음
+     * foldProgress 적용: 0~1 → 0°~90°
      ************************************************************/
-    function setFoldProgress(t) {
-        foldProgress = Math.max(0, Math.min(1,t));
-        layoutFlat(); 
+    function applyFold() {
+        facesSorted.forEach(face => {
+            const id = face.id;
+            const node = nodes[id];
+            if (!node) return;
+
+            // 기본은 평면 상태
+            let q = BABYLON.Quaternion.Identity();
+
+            if (id !== 0) {
+                const h = hingeInfo[id];
+                if (h && h.axis) {
+                    const angle = foldProgress * (Math.PI / 2); // 최대 90도
+                    q = BABYLON.Quaternion.RotationAxis(h.axis, angle);
+                }
+            }
+
+            node.rotationQuaternion = q;
+        });
     }
 
+    function setFoldProgress(t) {
+        foldProgress = Math.max(0, Math.min(1, t));
+        applyFold();
+    }
     FoldEngine.setFoldProgress = setFoldProgress;
-    FoldEngine.unfoldImmediate = ()=> setFoldProgress(0);
-    FoldEngine.foldImmediate   = ()=> setFoldProgress(1);
-    FoldEngine.foldTo          = (t)=> setFoldProgress(t);
 
     /************************************************************
-     * Render Loop
+     * main.js / html 이 사용하는 보조 API
+     ************************************************************/
+    FoldEngine.unfoldImmediate = function () {
+        setFoldProgress(0);
+    };
+
+    FoldEngine.foldImmediate = function () {
+        setFoldProgress(1);
+    };
+
+    FoldEngine.foldTo = function (t) {
+        setFoldProgress(t);
+    };
+
+    FoldEngine.foldStaticTo = function (rad) {
+        // rad = 0 ~ π/2
+        const t = rad / (Math.PI / 2);
+        setFoldProgress(t);
+    };
+
+    FoldEngine.foldAnimate = function () {
+        // 간단 버전: 바로 1로
+        setFoldProgress(1);
+        return Promise.resolve();
+    };
+
+    FoldEngine.showSolvedView = function () {
+        // 나중에 카메라 연출을 넣고 싶으면 여기서 조절
+        return Promise.resolve();
+    };
+
+    // Validator용
+    FoldEngine.getFaceGroups = function () {
+        return nodes;
+    };
+
+    /************************************************************
+     * Render Loop / Resize
      ************************************************************/
     function startRenderLoop() {
-        engine.runRenderLoop(()=>{ scene.render(); });
+        if (!engine || !scene) return;
+        engine.runRenderLoop(function () {
+            scene.render();
+        });
     }
 
-    FoldEngine.onResize = ()=> engine.resize();
+    FoldEngine.onResize = function () {
+        if (engine) engine.resize();
+    };
 
 })();

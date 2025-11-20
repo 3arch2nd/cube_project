@@ -278,15 +278,17 @@
 
 <!-- ---------------- Babylon + JS Modules ---------------- -->
 
+<!-- Babylon -->
 <script src="https://cdn.babylonjs.com/babylon.max.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
 
+<!-- 우리 스크립트들 (순서 매우 중요!!) -->
 <script src="./js/cube_nets.js"></script>
-<script src="./js/ui.js"></script>
+<script src="./js/main.js"></script>      <!-- ⭐ 먼저 로드 -->
+<script src="./js/ui.js"></script>        <!-- ⭐ 그 다음에 로드 -->
 <script src="./js/validator.js"></script>
 <script src="./js/overlap.js"></script>
-<script src="./js/foldEngine.js"></script>
-<script src="./js/main.js"></script>
+<script src="./js/foldEngine.js"></script>  <!-- foldEngine은 마지막 -->
 
 <script>
 document.getElementById("fold-slider").addEventListener("input", (e) => {

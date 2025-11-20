@@ -1,63 +1,75 @@
 /**
- * main.js – FoldEngine 최신 접기 시스템과 완전 호환되는 버전
- *  - 좌우반전/색 랜덤 절대 없음
- *  - 슬라이더로 접기/펼치기 정상 제어
- *  - 문제 전환 시 상태 완전 초기화
+ * main.js – 정육면체 전개도/겹침 통합 최신 버전 (Babylon.js + 슬라이더 대응)
  */
 
 (function () {
     "use strict";
 
-    window.CubeProject = {};
+    // ✅ 기존 것이 있어도 덮어쓰지 않고 재사용
+    const CubeProjectNS = window.CubeProject || {};
+    window.CubeProject = CubeProjectNS;
 
     const MAIN_MODE = {
         NET_BUILD: "netBuild",
         OVERLAP_FIND: "overlapFind"
     };
+    CubeProjectNS.MAIN_MODE = MAIN_MODE;
 
     const OVERLAP_MODE = { POINT: "point", EDGE: "edge", BOTH: "both" };
+    CubeProjectNS.OVERLAP_MODE = OVERLAP_MODE;
+
     const RUN_MODE = { PRACTICE: "practice", REAL: "real" };
+    CubeProjectNS.RUN_MODE = RUN_MODE;
 
     let mainMode = null;
     let overlapMode = OVERLAP_MODE.BOTH;
-    let runMode = RUN_MODE.PRACTICE;
 
+    let runMode = RUN_MODE.PRACTICE;
     let problemCount = 10;
+
     let problems = [];
     let currentIndex = 0;
-
     let currentProblem = null;
-    window.CubeProject.currentProblem = currentProblem;
+    CubeProjectNS.currentProblem = null;  // 항상 최신 문제를 여기에 넣음
 
     let netCanvas, threeCanvas;
+
+    // Babylon 엔진/씬 전역 참조
     let engine = null;
     let scene = null;
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------
     // 초기화
-    // ------------------------------------------------------------
+    // ------------------------------------------------
     document.addEventListener("DOMContentLoaded", init);
 
     function init() {
         netCanvas = document.getElementById("net-canvas");
         threeCanvas = document.getElementById("three-view");
 
-        // Babylon 엔진 준비
-        engine = new BABYLON.Engine(threeCanvas, true);
-        scene = new BABYLON.Scene(engine);
-        window.engine = engine;
-        window.scene = scene;
+        // Babylon 엔진 + Scene 생성 후 FoldEngine 초기화
+        if (typeof BABYLON !== "undefined" && typeof FoldEngine !== "undefined") {
+            try {
+                engine = new BABYLON.Engine(threeCanvas, true);
+                scene = new BABYLON.Scene(engine);
 
-        // FoldEngine 초기화
-        FoldEngine.init(threeCanvas, engine, scene);
+                window.scene = scene;
+                window.engine = engine;
 
-        // Babylon render loop
-        engine.runRenderLoop(() => scene.render());
+                FoldEngine.init(threeCanvas, engine, scene);
 
-        window.addEventListener("resize", () => {
-            engine.resize();
-            if (FoldEngine.onResize) FoldEngine.onResize();
-        });
+                startRenderLoop();
+
+                window.addEventListener("resize", () => {
+                    if (engine) engine.resize();
+                    if (FoldEngine.onResize) FoldEngine.onResize();
+                });
+            } catch (e) {
+                console.error("FoldEngine.init 실패: Babylon.js 초기화 문제.", e);
+            }
+        } else {
+            console.error("BABYLON 또는 FoldEngine이 정의되지 않았습니다. 스크립트 로드 순서를 확인하세요.");
+        }
 
         bindModeSelectPage();
         bindNetSetupPage();
@@ -66,315 +78,458 @@
         bindQRPopup();
         bindFoldSlider();
 
-        document.getElementById("fold-control").classList.add("hidden");
+        // 기본 선택 상태
+        const btnNetPractice = document.querySelector("#net-run-group button[data-run='practice']");
+        const btnOvBoth = document.querySelector("#ov-type-group button[data-type='both']");
+        const btnOvPractice = document.querySelector("#ov-run-group button[data-run='practice']");
+        if (btnNetPractice) btnNetPractice.classList.add("selected");
+        if (btnOvBoth) btnOvBoth.classList.add("selected");
+        if (btnOvPractice) btnOvPractice.classList.add("selected");
+
         showPage("mode-select-page");
+
+        const foldControl = document.getElementById("fold-control");
+        if (foldControl) foldControl.classList.add("hidden");
     }
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------
+    // 렌더링 루프
+    // ------------------------------------------------
+    function startRenderLoop() {
+        if (!engine || !scene) return;
+        engine.runRenderLoop(function () {
+            if (scene) scene.render();
+        });
+    }
+
+    // ------------------------------------------------
     // 페이지 전환
-    // ------------------------------------------------------------
-    function showPage(id) {
-        ["mode-select-page","setup-net","setup-overlap","problem-page","result-page"]
-        .forEach(p => document.getElementById(p).classList.add("hidden"));
+    // ------------------------------------------------
+    function showPage(pageId) {
+        const pages = [
+            "mode-select-page",
+            "setup-net",
+            "setup-overlap",
+            "problem-page",
+            "result-page"
+        ];
 
-        document.getElementById(id).classList.remove("hidden");
+        pages.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add("hidden");
+        });
 
-        // 슬라이더 노출 여부
-        if (id === "problem-page") {
-            document.getElementById("fold-control").classList.remove("hidden");
-        } else {
-            document.getElementById("fold-control").classList.add("hidden");
+        const target = document.getElementById(pageId);
+        if (target) target.classList.remove("hidden");
+
+        const foldControl = document.getElementById("fold-control");
+        if (foldControl) {
+            if (pageId === "problem-page") {
+                foldControl.classList.remove("hidden");
+            } else {
+                foldControl.classList.add("hidden");
+            }
         }
     }
 
-    // ------------------------------------------------------------
-    // 모드 선택
-    // ------------------------------------------------------------
+    // ------------------------------------------------
+    // 모드 선택 화면
+    // ------------------------------------------------
     function bindModeSelectPage() {
-        document.getElementById("btn-mode-net").onclick = () => {
-            mainMode = MAIN_MODE.NET_BUILD;
-            showPage("setup-net");
-        };
-        document.getElementById("btn-mode-overlap").onclick = () => {
-            mainMode = MAIN_MODE.OVERLAP_FIND;
-            showPage("setup-overlap");
-        };
+        const btnNet = document.getElementById("btn-mode-net");
+        const btnOverlap = document.getElementById("btn-mode-overlap");
+
+        if (btnNet) {
+            btnNet.onclick = () => {
+                mainMode = MAIN_MODE.NET_BUILD;
+                showPage("setup-net");
+            };
+        }
+
+        if (btnOverlap) {
+            btnOverlap.onclick = () => {
+                mainMode = MAIN_MODE.OVERLAP_FIND;
+                showPage("setup-overlap");
+            };
+        }
     }
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------
     // 전개도 완성하기 설정
-    // ------------------------------------------------------------
+    // ------------------------------------------------
     function bindNetSetupPage() {
-        document.querySelectorAll("#net-run-group button").forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll("#net-run-group button")
-                .forEach(b => b.classList.remove("selected"));
+        const runButtons = document.querySelectorAll("#net-run-group button");
+        runButtons.forEach(btn => {
+            btn.addEventListener("click", () => {
+                runButtons.forEach(b => b.classList.remove("selected"));
                 btn.classList.add("selected");
                 runMode = btn.dataset.run;
-            };
+            });
         });
 
         const disp = document.getElementById("net-q-display");
-        document.getElementById("net-q-minus").onclick = () => {
-            problemCount = Math.max(1, problemCount - 1);
-            disp.textContent = problemCount;
-        };
-        document.getElementById("net-q-plus").onclick = () => {
-            problemCount = Math.min(50, problemCount + 1);
-            disp.textContent = problemCount;
-        };
+        const minus = document.getElementById("net-q-minus");
+        const plus = document.getElementById("net-q-plus");
 
-        document.getElementById("start-net").onclick = startNetProblems;
+        if (minus && plus && disp) {
+            minus.addEventListener("click", () => {
+                problemCount = Math.max(1, problemCount - 1);
+                disp.textContent = problemCount;
+            });
+            plus.addEventListener("click", () => {
+                problemCount = Math.min(50, problemCount + 1);
+                disp.textContent = problemCount;
+            });
+        }
+
+        const startBtn = document.getElementById("start-net");
+        if (startBtn) {
+            startBtn.addEventListener("click", startNetProblems);
+        }
     }
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------
+    // 겹침 찾기 설정
+    // ------------------------------------------------
     function bindOverlapSetupPage() {
-        document.querySelectorAll("#ov-type-group button").forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll("#ov-type-group button")
-                .forEach(b => b.classList.remove("selected"));
+        const typeButtons = document.querySelectorAll("#ov-type-group button");
+        typeButtons.forEach(btn => {
+            btn.addEventListener("click", () => {
+                typeButtons.forEach(b => b.classList.remove("selected"));
                 btn.classList.add("selected");
                 overlapMode = btn.dataset.type;
-            };
+            });
         });
 
-        document.querySelectorAll("#ov-run-group button").forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll("#ov-run-group button")
-                .forEach(b => b.classList.remove("selected"));
+        const runButtons = document.querySelectorAll("#ov-run-group button");
+        runButtons.forEach(btn => {
+            btn.addEventListener("click", () => {
+                runButtons.forEach(b => b.classList.remove("selected"));
                 btn.classList.add("selected");
                 runMode = btn.dataset.run;
-            };
+            });
         });
 
         const disp = document.getElementById("ov-q-display");
-        document.getElementById("ov-q-minus").onclick = () => {
-            problemCount = Math.max(1, problemCount - 1);
-            disp.textContent = problemCount;
-        };
-        document.getElementById("ov-q-plus").onclick = () => {
-            problemCount = Math.min(50, problemCount + 1);
-            disp.textContent = problemCount;
-        };
+        const minus = document.getElementById("ov-q-minus");
+        const plus = document.getElementById("ov-q-plus");
 
-        document.getElementById("start-overlap").onclick = startOverlapProblems;
+        if (minus && plus && disp) {
+            minus.addEventListener("click", () => {
+                problemCount = Math.max(1, problemCount - 1);
+                disp.textContent = problemCount;
+            });
+            plus.addEventListener("click", () => {
+                problemCount = Math.min(50, problemCount + 1);
+                disp.textContent = problemCount;
+            });
+        }
+
+        const startBtn = document.getElementById("start-overlap");
+        if (startBtn) {
+            startBtn.addEventListener("click", startOverlapProblems);
+        }
     }
 
-    // ------------------------------------------------------------
-    // 문제 생성
-    // ------------------------------------------------------------
+    // ------------------------------------------------
+    // 문제 생성 함수들
+    // ------------------------------------------------
     function generateOneNetProblem() {
         const p = CubeNets.getRandomPieceProblem();
-        return { mode: MAIN_MODE.NET_BUILD, solid: "cube", net: p.net };
+        return {
+            mode: MAIN_MODE.NET_BUILD,
+            solid: "cube",
+            net: p.net
+        };
     }
 
     function generateOneOverlapProblem() {
-        const p = CubeNets.getRandomOverlapProblem(overlapMode);
-        return { mode: MAIN_MODE.OVERLAP_FIND, solid:"cube", net:p.net, overlapMode };
+        const netObj = CubeNets.getRandomOverlapProblem(overlapMode);
+        return {
+            mode: MAIN_MODE.OVERLAP_FIND,
+            solid: "cube",
+            net: netObj.net,
+            overlapMode: overlapMode
+        };
     }
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------
+    // 모드별 시작
+    // ------------------------------------------------
     function startNetProblems() {
-        problems = Array.from({length:problemCount}, () => generateOneNetProblem());
+        problems = [];
+        for (let i = 0; i < problemCount; i++) {
+            problems.push(generateOneNetProblem());
+        }
         currentIndex = 0;
         showPage("problem-page");
         loadProblem();
     }
 
     function startOverlapProblems() {
-        problems = Array.from({length:problemCount}, () => generateOneOverlapProblem());
+        problems = [];
+        for (let i = 0; i < problemCount; i++) {
+            problems.push(generateOneOverlapProblem());
+        }
         currentIndex = 0;
         showPage("problem-page");
         loadProblem();
     }
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------
     // 문제 로딩
-    // ------------------------------------------------------------
+    // ------------------------------------------------
     async function loadProblem() {
-
         currentProblem = problems[currentIndex];
-        window.CubeProject.currentProblem = currentProblem;
+        CubeProjectNS.currentProblem = currentProblem;
 
-        if (!currentProblem) return showResultPage();
+        if (!currentProblem) {
+            showResultPage();
+            return;
+        }
 
-        // UI 버튼 상태
-        document.getElementById("btn-next").classList.add("hidden");
+        const btnNext = document.getElementById("btn-next");
         const btnCheck = document.getElementById("btn-check");
-        btnCheck.classList.remove("hidden");
-        btnCheck.disabled = false;
+        if (btnNext && btnCheck) {
+            btnNext.classList.add("hidden");
+            btnCheck.classList.remove("hidden");
+            btnCheck.disabled = false;
+        }
 
-        // 슬라이더 초기화
-        const foldSlider = document.getElementById("fold-slider");
-        foldSlider.value = 0;
-        foldSlider.disabled = false;
-        document.getElementById("slider-value").textContent = "0.00";
+        const foldSlider = document.getElementById('fold-slider');
+        const sliderValue = document.getElementById('slider-value');
+        if (foldSlider && sliderValue) {
+            foldSlider.value = 0;
+            sliderValue.textContent = '0.00';
+            foldSlider.disabled = false;
+        }
 
-        // 제목
+        const title = document.getElementById("problem-title");
         const idx = currentIndex + 1;
-        document.getElementById("problem-title").textContent =
-            currentProblem.mode === MAIN_MODE.NET_BUILD
-            ? `전개도 완성하기 (${idx}/${problemCount})`
-            : `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
 
-        // 2D 화면 구성
+        if (title) {
+            if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+                title.textContent = `전개도 완성하기 (${idx}/${problemCount})`;
+            } else {
+                title.textContent = `겹쳐지는 부분 찾기 (${idx}/${problemCount})`;
+            }
+        }
+
+        // 2D 전개도
         UI.init(netCanvas);
         UI.clear();
-        UI.renderNet(currentProblem.net, {
-            highlightPositions: currentProblem.mode === MAIN_MODE.NET_BUILD
-        });
 
-        // 3D 데이터 준비
-        const threeNet = JSON.parse(JSON.stringify(currentProblem.net));
-
-        // 빠진 조각은 foldEngine에서 투명 처리
+        const opt = {};
         if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+            opt.highlightPositions = true;
+        }
+        UI.renderNet(currentProblem.net, opt);
+
+        // 3D용 데이터
+        const netFor3D = JSON.parse(JSON.stringify(currentProblem.net));
+
+        if (currentProblem.mode === MAIN_MODE.NET_BUILD && window.UI && UI.getRemovedFaceId) {
             const removedId = UI.getRemovedFaceId();
-            threeNet.faces.forEach(f => {
-                if (f.id === removedId) f._hidden = true;
+            netFor3D.faces.forEach(f => {
+                if (f.id === removedId) {
+                    f._hidden = true;
+                }
             });
         }
 
-        await FoldEngine.loadNet(threeNet);   // 이미 펼친 상태로 자동 배치됨
-        FoldEngine.unfoldImmediate();         // (안전용)
-        
-        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+        await FoldEngine.loadNet(netFor3D);
+        FoldEngine.unfoldImmediate();
+
+        if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND && window.Overlap) {
             Overlap.startSelection(currentProblem.net);
         }
     }
 
-    // ------------------------------------------------------------
-    // 슬라이더로 foldEngine 제어
-    // ------------------------------------------------------------
+    // ------------------------------------------------
+    // 슬라이더 제어
+    // ------------------------------------------------
     function bindFoldSlider() {
-        const slider = document.getElementById("fold-slider");
-        const label = document.getElementById("slider-value");
+        const foldSlider = document.getElementById('fold-slider');
+        const sliderValueSpan = document.getElementById('slider-value');
 
-        slider.oninput = () => {
-            const t = Number(slider.value);
-            label.textContent = t.toFixed(2);
-            FoldEngine.foldTo(t);
-        };
-    }
+        if (!foldSlider || !sliderValueSpan) return;
 
-    // ------------------------------------------------------------
-    // 정답 확인
-    // ------------------------------------------------------------
-    function bindProblemButtons() {
+        foldSlider.addEventListener('input', () => {
+            const progress = parseFloat(foldSlider.value);
+            sliderValueSpan.textContent = progress.toFixed(2);
 
-        document.getElementById("btn-check").onclick = async () => {
-
-            const slider = document.getElementById("fold-slider");
-            slider.disabled = true;
-
-            let correct = false;
-            let netForCheck = JSON.parse(JSON.stringify(currentProblem.net));
-
-            if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
-
-                const placed = UI.placed;
-                if (!placed) {
-                    alert("조각이 배치되지 않았습니다.");
-                    slider.disabled = false;
-                    return;
-                }
-
-                const removedId = UI.getRemovedFaceId();
-                const face = netForCheck.faces.find(f => f.id === removedId);
-
-                if (face) {
-                    face.u = placed.u;
-                    face.v = placed.v;
-                } else {
-                    netForCheck.faces.push({
-                        id: removedId,
-                        u: placed.u,
-                        v: placed.v,
-                        w: 1,
-                        h: 1,
-                        color: placed.color
-                    });
-                    netForCheck.faces.sort((a,b)=>a.id-b.id);
-                }
-
-                await FoldEngine.loadNet(netForCheck);
-                correct = Validator.validateNet(netForCheck);
-
-            } else {
-                await FoldEngine.loadNet(netForCheck);
-                correct = Overlap.checkUserAnswer(netForCheck);
+            if (typeof FoldEngine.setFoldProgress === 'function') {
+                FoldEngine.setFoldProgress(progress);
             }
+        });
+    }
 
-            // 정답/오답 상관 없이 접힌 상태로 보여줌
-            FoldEngine.foldTo(1);
-            slider.value = 1;
-            document.getElementById("slider-value").textContent = "1.00";
+    // ------------------------------------------------
+    // 정답 확인 / 다음 / 종료 버튼
+    // ------------------------------------------------
+    function bindProblemButtons() {
+        const btnCheck = document.getElementById("btn-check");
+        const btnNext = document.getElementById("btn-next");
+        const btnExit = document.getElementById("btn-exit");
 
-            setTimeout(() => {
-                if (correct) {
-                    alert("정답입니다! 🎉");
-                    document.getElementById("btn-check").classList.add("hidden");
-                    document.getElementById("btn-next").classList.remove("hidden");
-                    slider.disabled = false;
+        if (btnCheck) {
+            btnCheck.addEventListener("click", async () => {
+                btnCheck.disabled = true;
+                const foldSlider = document.getElementById('fold-slider');
+                if (foldSlider) foldSlider.disabled = true;
+
+                let correct = false;
+                let netForFold = currentProblem.net;
+
+                if (currentProblem.mode === MAIN_MODE.NET_BUILD) {
+                    const placedPos = window.UI.placed;
+                    if (!placedPos) {
+                        alert("조각이 배치되지 않았습니다.");
+                        btnCheck.disabled = false;
+                        if (foldSlider) foldSlider.disabled = false;
+                        return;
+                    }
+
+                    netForFold = JSON.parse(JSON.stringify(currentProblem.net));
+                    const removedId = window.UI.getRemovedFaceId();
+
+                    let f = netForFold.faces.find(x => x.id === removedId);
+                    if (f) {
+                        f.u = placedPos.u;
+                        f.v = placedPos.v;
+                        f.w = placedPos.w;
+                        f.h = placedPos.h;
+                    } else {
+                        netForFold.faces.push({
+                            id: removedId,
+                            u: placedPos.u,
+                            v: placedPos.v,
+                            w: placedPos.w,
+                            h: placedPos.h
+                        });
+                        netForFold.faces.sort((a, b) => a.id - b.id);
+                    }
+
+                    await FoldEngine.loadNet(netForFold);
+                    correct = Validator.validateNet(netForFold);
+
                 } else {
-                    alert("다시 시도해볼까요? 🤔");
-
-                    setTimeout(() => {
-                        FoldEngine.unfoldImmediate();
-                        slider.disabled = false;
-                        slider.value = 0;
-                        document.getElementById("slider-value").textContent = "0.00";
-
-                        if (currentProblem.mode===MAIN_MODE.OVERLAP_FIND) {
-                            Overlap.startSelection(currentProblem.net);
-                            UI.renderNet(currentProblem.net,{});
-                        } else {
-                            UI.renderNet(currentProblem.net,{highlightPositions:true});
-                        }
-
-                    }, 1400);
+                    await FoldEngine.loadNet(netForFold);
+                    correct = window.Overlap.checkUserAnswer(netForFold);
                 }
-            }, 50);
-        };
 
-        document.getElementById("btn-next").onclick = () => {
-            currentIndex++;
-            if (currentIndex >= problemCount) showResultPage();
-            else loadProblem();
-        };
+                // 여기서는 FoldEngine이 "완전히 접힌 상태"로 간다고 가정하는 스텁
+                if (typeof FoldEngine.foldImmediate === 'function') {
+                    FoldEngine.foldImmediate(1.0);
+                }
+                if (foldSlider) {
+                    foldSlider.value = 1.0;
+                    const sliderValueSpan = document.getElementById('slider-value');
+                    if (sliderValueSpan) sliderValueSpan.textContent = '1.00';
+                }
 
-        document.getElementById("btn-exit").onclick = () => {
-            if (confirm("처음으로 돌아갈까요?")) showPage("mode-select-page");
-        };
-    }
+                setTimeout(() => {
+                    if (correct) {
+                        alert("정답입니다! 🎉 3D 큐브를 돌려보세요!");
+                        if (btnCheck && btnNext) {
+                            btnCheck.classList.add("hidden");
+                            btnNext.classList.remove("hidden");
+                        }
+                        if (foldSlider) foldSlider.disabled = false;
+                    } else {
+                        alert("다시 생각해 볼까요? 🤔 큐브를 펼쳐보며 확인해 보세요.");
 
-    // ------------------------------------------------------------
-    // 결과 페이지
-    // ------------------------------------------------------------
-    function showResultPage() {
-        const acc = ((currentIndex/problemCount)*100).toFixed(1);
-        showPage("result-page");
-        document.getElementById("result-acc").textContent = `${acc}%`;
-        document.getElementById("btn-restart").onclick = () => showPage("mode-select-page");
-    }
+                        if (foldSlider) foldSlider.disabled = false;
+                        btnCheck.disabled = false;
 
-    // ------------------------------------------------------------
-    // QR 코드
-    // ------------------------------------------------------------
-    function bindQRPopup() {
-        document.getElementById("qr-btn").onclick = () => {
-            document.getElementById("qr-popup").style.display = "flex";
-            const holder = document.getElementById("qr-holder");
-            holder.innerHTML = "";
-            new QRCode(holder, {
-                text: "https://cube.3arch2nd.site",
-                width: 180, height: 180
+                        setTimeout(() => {
+                            if (typeof FoldEngine.unfoldImmediate === 'function') {
+                                FoldEngine.unfoldImmediate();
+                            }
+                            if (foldSlider) {
+                                foldSlider.value = 0.0;
+                                const sliderValueSpan = document.getElementById('slider-value');
+                                if (sliderValueSpan) sliderValueSpan.textContent = '0.00';
+                            }
+
+                            if (currentProblem.mode === MAIN_MODE.OVERLAP_FIND) {
+                                Overlap.startSelection(currentProblem.net);
+                                UI.renderNet(currentProblem.net, {});
+                            } else {
+                                UI.renderNet(currentProblem.net, { highlightPositions: true });
+                            }
+                        }, 1500);
+                    }
+                }, 50);
             });
-        };
+        }
 
-        document.getElementById("qr-close").onclick = () => {
-            document.getElementById("qr-popup").style.display = "none";
-        };
+        if (btnNext) {
+            btnNext.addEventListener("click", () => {
+                currentIndex++;
+                if (currentIndex >= problemCount) {
+                    showResultPage();
+                } else {
+                    loadProblem();
+                }
+            });
+        }
+
+        if (btnExit) {
+            btnExit.addEventListener("click", () => {
+                if (confirm("처음 화면으로 돌아갈까요?")) {
+                    showPage("mode-select-page");
+                }
+            });
+        }
+    }
+
+    // ------------------------------------------------
+    // 결과 페이지
+    // ------------------------------------------------
+    function showResultPage() {
+        const correctCount = currentIndex;
+
+        showPage("result-page");
+        const accSpan = document.getElementById("result-acc");
+        if (accSpan) {
+            accSpan.textContent = `${((correctCount / problemCount) * 100).toFixed(1)}%`;
+        }
+
+        const btnRestart = document.getElementById("btn-restart");
+        if (btnRestart) {
+            btnRestart.onclick = () => {
+                showPage("mode-select-page");
+            };
+        }
+    }
+
+    // ------------------------------------------------
+    // QR 팝업
+    // ------------------------------------------------
+    function bindQRPopup() {
+        const btnQR = document.getElementById("qr-btn");
+        const popup = document.getElementById("qr-popup");
+        const holder = document.getElementById("qr-holder");
+        const btnClose = document.getElementById("qr-close");
+
+        if (btnQR && popup && holder) {
+            btnQR.addEventListener("click", () => {
+                popup.style.display = "flex";
+                holder.innerHTML = "";
+                new QRCode(holder, {
+                    text: "https://cube.3arch2nd.site",
+                    width: 180,
+                    height: 180
+                });
+            });
+        }
+
+        if (btnClose && popup) {
+            btnClose.addEventListener("click", () => {
+                popup.style.display = "none";
+            });
+        }
     }
 
 })();

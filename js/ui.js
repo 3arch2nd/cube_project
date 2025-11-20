@@ -65,10 +65,15 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         currentNet = JSON.parse(JSON.stringify(net));
 
+        // ⭐ MAIN_MODE / currentProblem 방어적으로 체크
+        const cp = window.CubeProject || {};
+        const MODES = cp.MAIN_MODE || {};
+        const curProb = cp.currentProblem;
+
         const isNetBuildMode =
-            window.CubeProject &&
-            window.CubeProject.currentProblem &&
-            window.CubeProject.currentProblem.mode === window.CubeProject.MAIN_MODE.NET_BUILD;
+            !!(curProb &&
+               MODES.NET_BUILD &&
+               curProb.mode === MODES.NET_BUILD);
 
         // 전개도 완성 모드일 때만 제거 면/후보 위치 계산
         if (isNetBuildMode) {
@@ -120,9 +125,6 @@
 
     // ------------------------------------------------
     // 중심 정렬 계산
-    //   - removedFace 제외
-    //   - candidatePositions 포함 (항상 보이도록)
-    //   - placed 는 포함하지 않음 → 클릭해도 전개도 안 흔들림
     // ------------------------------------------------
     function calculateCenterOffset(net, removedId, isNetBuildMode) {
         if (!net || !net.faces.length) return;

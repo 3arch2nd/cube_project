@@ -222,12 +222,50 @@
     }
 
     /************************************************************
-     * foldProgress (아직 회전 없음)
-     ************************************************************/
-    function setFoldProgress(t) {
-        foldProgress = Math.max(0, Math.min(1, t));
-        layoutFlat();
+ * foldProgress — 회전 적용 (HINGE 적용)
+ ************************************************************/
+function setFoldProgress(t) {
+    foldProgress = Math.max(0, Math.min(1, t));
+
+    const angle = foldProgress * (Math.PI / 2); // 0~90°
+
+    // 모든 면 초기화
+    facesSorted.forEach(f => {
+        const node = nodes[f.id];
+        node.rotationQuaternion = BABYLON.Quaternion.Identity();
+        node.setPivotPoint(BABYLON.Vector3.Zero());
+    });
+
+    // root는 회전 없음
+    const queue = [0];
+    const visited = new Set([0]);
+
+    while (queue.length) {
+        const parent = queue.shift();
+
+        hingeInfo.forEach((hinge, id) => {
+            if (!hinge || hinge.parent !== parent) return;
+            if (visited.has(id)) return;
+
+            visited.add(id);
+            queue.push(id);
+
+            const node = nodes[id];
+
+            // 힌지 피벗 설정
+            node.setPivotPoint(hinge.pivot);
+
+            // 회전축 quaternion 적용
+            const q = BABYLON.Quaternion.RotationAxis(hinge.axis, angle);
+
+            node.rotationQuaternion = q;
+        });
     }
+
+    // 위치는 평면 배치 고정
+    layoutFlat();
+}
+
 
     /************************************************************
      * API

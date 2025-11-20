@@ -194,18 +194,14 @@
         }
 
         // 실제 TransformNode 트리 구성
-        facesSorted.forEach(face => {
-            if (face.id === 0) return; // root
+        // ★ 트리 구조를 TransformNode에 즉시 적용
+facesSorted.forEach(face => {
+    const id = face.id;
+    const h = hingeInfo[id];
+    if (!h || h.parent === null) return;
+    nodes[id].parent = nodes[h.parent];
+});
 
-            const info = hingeInfo[face.id];
-            if (!info || info.parent == null) return;
-
-            const parentNode = nodes[info.parent];
-            const node = nodes[face.id];
-            if (parentNode && node) {
-                node.parent = parentNode;
-            }
-        });
 
         console.log("HINGE INFO:", hingeInfo);
     }
@@ -253,25 +249,42 @@
     /************************************************************
      * 평면 배치: 2D와 완전 동일하게, 중심을 (0,0)에 맞춤
      ************************************************************/
-    function layoutFlat() {
-        const S = options.cellSize;
+function layoutFlat() {
+    const S = options.cellSize;
 
-        facesSorted.forEach(f => {
-            const node = nodes[f.id];
-            if (!node) return;
+    facesSorted.forEach(f => {
+        const node = nodes[f.id];
+        if (!node) return;
 
-            // 면 중심 좌표
-            const cx = f.u + f.w / 2;
-            const cy = f.v + f.h / 2;
+        // 1) 먼저 "월드 좌표" 계산 (부모 없는 상태에서)
+        const cx = f.u + f.w / 2;
+        const cy = f.v + f.h / 2;
 
-            // 전개도 중심 보정
-            const x = (cx - netCenter.x) * S;
-            const y = (netCenter.y - cy) * S;
+        const worldX = (cx - netCenter.x) * S;
+        const worldY = (netCenter.y - cy) * S;
+        const worldPos = new BABYLON.Vector3(worldX, worldY, 0);
 
-            node.position = new BABYLON.Vector3(x, y, 0);
-            node.rotationQuaternion = BABYLON.Quaternion.Identity();
-            node.setPivotPoint(BABYLON.Vector3.Zero());
-        });
+        // 2) 부모가 있으면 부모 기준 좌표로 변환
+        let finalPos = worldPos.clone();
+        const h = hingeInfo[f.id];
+
+        if (h && h.parent !== null) {
+            const parentNode = nodes[h.parent];
+
+            // 부모의 월드 행렬을 얻어서 inverse 적용
+            const parentMatrix = parentNode.getWorldMatrix();
+            const inv = new BABYLON.Matrix();
+            parentMatrix.invertToRef(inv);
+
+            BABYLON.Vector3.TransformCoordinatesToRef(worldPos, inv, finalPos);
+        }
+
+        // 3) 실제 노드의 위치는 "부모 기준 좌표"
+        node.position = finalPos;
+
+        // 평면이므로 회전은 0
+        node.rotationQuaternion = BABYLON.Quaternion.Identity();
+    });
 
         if (camera) {
             camera.target = new BABYLON.Vector3(0, 0, 0);

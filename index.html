@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
     <title>입체도형 완전 정복</title>
+
     <meta property="og:title" content="입체도형 완전 정복">
     <meta property="og:description" content="전개도 완성하기 / 겹쳐지는 부분 찾기 문제 자동 생성">
     <meta property="og:url" content="https://cube.3arch2nd.site">
@@ -38,8 +39,6 @@
             box-shadow: 0 6px 20px rgba(0,0,0,0.1);
         }
 
-        .hidden { display:none !important; }
-
         button {
             padding: 12px 20px;
             border: none;
@@ -54,7 +53,12 @@
         .gray-btn { background:#e5e5e5; }
         .orange-btn { background:#ffc457; }
         .red-btn { background:#dd6666; color:white; }
-        button.selected { background:#ffc107 !important; color:#333 !important; font-weight:bold; }
+
+        button.selected {
+            background:#ffc107 !important;
+            color:#333 !important;
+            font-weight:bold;
+        }
 
         .section {
             margin-top:20px;
@@ -62,7 +66,6 @@
             border-radius:12px;
             background:#fafafa;
             border:1px solid #ddd;
-            text-align:center;
         }
 
         .option-row {
@@ -73,34 +76,33 @@
             margin-top:10px;
         }
 
-        /* 문제 페이지 */
+        .hidden { display:none !important; }
+
         .canvas-wrapper {
             background: #f0f0f0; 
             border: 1px solid #ddd;
             border-radius: 8px;
             padding: 10px;
             margin: 20px auto;
-            display: inline-block; 
+            display: inline-block;
         }
-        
+
         #net-canvas {
             width:350px;
             height:350px;
             background:white;
             border:2px solid #333;
-            margin: 0 auto;
         }
-        
+
         #three-view {
             width:350px;
             height:350px;
             background:#000;
             margin:20px auto 0;
-            transform: translateZ(0); 
+            transform: translateZ(0);
             will-change: transform;
         }
 
-        /* 슬라이더 */
         #fold-control {
             margin: 10px auto 20px;
             padding: 10px 15px;
@@ -113,9 +115,10 @@
             justify-content: center;
             gap: 10px;
         }
-        #fold-slider { flex-grow: 1; }
 
-        /* QR 팝업 */
+        #fold-slider { flex-grow: 1; }
+        #slider-value { width:40px; text-align:right; font-weight:bold; }
+
         #qr-popup {
             position:fixed;
             left:0; top:0;
@@ -146,7 +149,9 @@
 
 <div class="container">
 
-    <!-- ⭐ 1. 모드 선택 페이지 -->
+    <!-- -------------------------------------- -->
+    <!-- 모드 선택 페이지 -->
+    <!-- -------------------------------------- -->
     <div id="mode-select-page">
         <h2>학습 모드를 선택하세요.</h2>
         <div class="option-row">
@@ -155,10 +160,11 @@
         </div>
     </div>
 
-    <!-- ⭐ 2. 전개도 완성하기 설정 -->
+    <!-- -------------------------------------- -->
+    <!-- 전개도 완성하기 설정 -->
+    <!-- -------------------------------------- -->
     <div id="setup-net" class="hidden">
-
-        <h2>전개도 완성하기 (정육면체) - 설정</h2>
+        <h2>전개도 완성하기 - 설정</h2>
 
         <div class="section">
             <h3>진행 방식</h3>
@@ -177,13 +183,16 @@
             </div>
         </div>
 
-        <button id="start-net" class="green-btn">문제 시작하기</button>
+        <button id="start-net" class="green-btn" style="margin-top:20px;">
+            문제 시작하기
+        </button>
     </div>
 
-    <!-- ⭐ 3. 겹침 찾기 설정 -->
+    <!-- -------------------------------------- -->
+    <!-- 겹침 찾기 설정 -->
+    <!-- -------------------------------------- -->
     <div id="setup-overlap" class="hidden">
-
-        <h2>겹쳐지는 부분 찾기 (정육면체) - 설정</h2>
+        <h2>겹쳐지는 부분 찾기 - 설정</h2>
 
         <div class="section">
             <h3>겹침 유형</h3>
@@ -211,10 +220,14 @@
             </div>
         </div>
 
-        <button id="start-overlap" class="orange-btn">문제 시작하기</button>
+        <button id="start-overlap" class="orange-btn" style="margin-top:20px;">
+            문제 시작하기
+        </button>
     </div>
 
-    <!-- ⭐ 4. 문제 페이지 -->
+    <!-- -------------------------------------- -->
+    <!-- 문제 페이지 -->
+    <!-- -------------------------------------- -->
     <div id="problem-page" class="hidden">
         <h2 id="problem-title">문제</h2>
 
@@ -225,42 +238,49 @@
         <canvas id="three-view" width="350" height="350"></canvas>
 
         <div id="fold-control">
-            <span>펼침(0)</span>
+            <span>펼침 (0)</span>
             <input type="range" id="fold-slider" min="0" max="1" step="0.01" value="0">
-            <span>(1)접힘</span>
+            <span>(1) 접힘</span>
             <span id="slider-value">0.00</span>
         </div>
 
-        <div class="option-row">
+        <div class="option-row" style="margin-top:20px;">
             <button id="btn-check" class="green-btn">정답 확인</button>
             <button id="btn-next" class="orange-btn hidden">다음 문제</button>
             <button id="btn-exit" class="red-btn">종료</button>
         </div>
     </div>
 
-    <!-- ⭐ 5. 결과 페이지 -->
+    <!-- -------------------------------------- -->
+    <!-- 결과 페이지 -->
+    <!-- -------------------------------------- -->
     <div id="result-page" class="hidden">
         <h2>학습 결과</h2>
         <p>정답률: <span id="result-acc"></span></p>
-        <button id="btn-restart" class="green-btn">처음으로 돌아가기</button>
+
+        <button id="btn-restart" class="green-btn" style="margin-top:20px;">
+            처음으로 돌아가기
+        </button>
     </div>
 
 </div>
 
+<!-- -------------------------------------- -->
 <!-- QR 팝업 -->
+<!-- -------------------------------------- -->
 <div id="qr-popup">
     <div id="qr-box">
         <h3>QR 코드</h3>
         <div id="qr-holder"></div>
-        <button id="qr-close" class="gray-btn">닫기</button>
+        <button id="qr-close" class="gray-btn" style="margin-top:20px;">닫기</button>
     </div>
 </div>
 
-<!-- Babylon.js -->
+<!-- ---------------- Babylon + JS Modules ---------------- -->
+
 <script src="https://cdn.babylonjs.com/babylon.max.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
 
-<!-- 앱 로직 -->
 <script src="./js/cube_nets.js"></script>
 <script src="./js/ui.js"></script>
 <script src="./js/validator.js"></script>
@@ -268,11 +288,10 @@
 <script src="./js/foldEngine.js"></script>
 <script src="./js/main.js"></script>
 
-<!-- 슬라이더 연동 (foldEngine.js 의 setFoldProgress 사용) -->
 <script>
 document.getElementById("fold-slider").addEventListener("input", (e) => {
     const v = Number(e.target.value);
-    FoldEngine.setFoldProgress(v);
+    FoldEngine.setFoldProgress?.(v);
     document.getElementById("slider-value").textContent = v.toFixed(2);
 });
 </script>

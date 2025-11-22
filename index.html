@@ -3,300 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-
-    <title>입체도형 완전 정복</title>
-
-    <meta property="og:title" content="입체도형 완전 정복">
+    <title>정육면체 완전 정복</title>
+    <meta property="og:title" content="정육면체 완전 정복">
     <meta property="og:description" content="전개도 완성하기 / 겹쳐지는 부분 찾기 문제 자동 생성">
-    <meta property="og:url" content="https://cube.3arch2nd.site">
-    <meta property="og:type" content="website">
-
+    <meta name="description" content="Educational Web App for Elementary School Learning | Education / School / Study / Quiz / Learning Activity for Students" />
     <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
-
-    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
-
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
     <style>
-        body {
-            margin: 0;
-            font-family: 'Gowun Dodum', sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
-            text-align: center;
-        }
-
-        h1 {
-            margin-top: 30px;
-            color: #4b8134;
-        }
-
-        .container {
-            width: 90%;
-            max-width: 900px;
-            margin: 20px auto;
-            background: #fff;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-        }
-
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            margin: 5px;
-            font-family: inherit;
-        }
-
+        body { margin: 0; font-family: 'Gowun Dodum', sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; background-color: #f4f7f6; color: #333; text-align: center; }
+        .container { position: relative; width: 90%; max-width: 900px; margin: 20px auto; background: #fff; border-radius: 12px; padding: 25px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); box-sizing: border-box; }
+        h1 { color: #4b8134; margin-top: 60px; margin-bottom: 20px; font-size: 2em; }
+        h2 { margin-bottom: 15px; font-size: 1.5em; }
+        h3 { margin-top: 0; margin-bottom: 10px; }
+        small { display: block; font-size: 16px; color: #6c757d; line-height: 1.5; }
+        .mode-description { font-size: 14px; margin-top: 5px; }
+        button { font-family: inherit; padding: 12px 20px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 5px; transition: background-color 0.3s, transform 0.1s; }
+        button:hover { transform: translateY(-1px); }
         .green-btn { background:#92c572; color:white; }
         .gray-btn { background:#e5e5e5; }
         .orange-btn { background:#ffc457; }
         .red-btn { background:#dd6666; color:white; }
-
-        button.selected {
-            background:#ffc107 !important;
-            color:#333 !important;
-            font-weight:bold;
-        }
-
-        .section {
-            margin-top:20px;
-            padding:20px;
-            border-radius:12px;
-            background:#fafafa;
-            border:1px solid #ddd;
-        }
-
-        .option-row {
-            display:flex;
-            justify-content:center;
-            flex-wrap:wrap;
-            gap:10px;
-            margin-top:10px;
-        }
-
+        .primary-btn { background-color: #a0c179; color: white; }
+        .primary-btn:hover { background-color: #8cb24b; }
+        .secondary-btn { background-color: #e9e9e9; color: #333; }
+        .secondary-btn:hover { background-color: #d9d9d9; }
+        button.selected { background:#ffc107 !important; color:#333 !important; font-weight:bold; }
+        
         .hidden { display:none !important; }
+        
+        .section { margin-top:20px; padding:20px; border-radius:12px; background:#fafafa; border:1px solid #ddd; }
+        .option-row { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; margin-top:10px; }
+        #mode-select-page { padding-top: 10px; padding-bottom: 30px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 15px; }
+        .mode-buttons { display: flex; gap: 15px; margin-top: 10px; width: 100%; justify-content: space-around; }
+        .mode-buttons button { padding: 20px 30px; font-size: 18px; width: 100%; max-width: 250px; }
+        .mode-option { flex: 1; display: flex; flex-direction: column; align-items: center; }
+        #setup-net, #setup-overlap { display: flex; flex-direction: column; align-items: center; width: 100%; }
+        .main-layout { display: flex; flex-direction: row; gap: 20px; width: 100%; align-items: stretch; flex-wrap: wrap; justify-content: center; }
+        .left-panel { flex: 2; display: flex; flex-direction: column; gap: 20px; min-width: 300px; }
+        .right-panel { flex: 1; display: flex; flex-direction: column; gap: 20px; min-width: 300px; }
+        .start-btn-container { border: none; background-color: transparent; padding: 0; display: flex; justify-content: center; align-items: center; flex-grow: 1; }
+        #start-net, #start-overlap { width: 100px; height: 100px; border-radius: 50%; font-size: 20px; font-weight: bold; display: flex; justify-content: center; align-items: center; padding: 0; flex-shrink: 0; }
+        #quantity-control { display: flex; align-items: center; justify-content: center; gap: 15px; }
+        #quantity-control button { width: 30px; height: 30px; border-radius: 50%; padding: 0; margin: 0; font-size: 20px; font-weight: bold; line-height: 30px; background-color: #f0f0f0; border: 1px solid #ccc; color: #333; }
+        .quantity-display { font-size: 22px; font-weight: bold; }
+        .problem-header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 15px; }
+        .header-home-btn { position: absolute; top: 20px; left: 20px; z-index: 10; }
+        .home-button { background-color: #e9e9e9; color: #333; border-radius: 8px; padding: 8px 12px; font-size: 14px; display: flex; align-items: center; gap: 5px; cursor: pointer; text-decoration: none; }
+        #problem-title { flex-grow: 1; text-align: center; margin: 0; font-size: 1.5em; }
+        .canvas-wrapper, .three-view-wrapper { max-width: 350px; max-height: 350px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin: 20px auto; width: 100%; box-sizing: border-box; aspect-ratio: 1 / 1; display: block; }
+        #net-canvas, #three-view { width:100%; height:100%; background:white; border:2px solid #333; box-sizing: border-box; }
+        #three-view { background:#000; margin: 0; transform: translateZ(0); will-change: transform; touch-action: none; outline: none; }
+        #fold-control { margin: 10px auto 20px; padding: 10px 20px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; max-width: 350px; width: 90%; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+        .slider-label { font-size: 15px; font-weight: bold; color: #555; white-space: nowrap; }
+        #fold-slider { flex-grow: 1; cursor: pointer; }
+        .problem-footer { display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 30px; padding-bottom: 20px; clear: both; }
+        #check-answer-container { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+        #btn-check { position: relative; overflow: hidden; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; background-color: white; color: black; border: 2px solid #999; min-width: 200px; height: 50px; font-size: 1.1em; transition: border-color 0.3s; display: flex; justify-content: center; align-items: center; }
+        #btn-check:hover { background-color: #f0f0f0; }
+        #btn-next { min-width: 200px; height: 50px; font-size: 1.1em; background:#ffc457; color:#333; }
+        #btn-check .progress-bar { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #92c572; transform: translateX(-100%); z-index: 0; }
+        #btn-check .button-text { position: relative; z-index: 1; }
+        .check-answer-guide { font-size: 14px; color: #888; margin: 0; text-align: center; }
 
-        .canvas-wrapper {
-            background: #f0f0f0; 
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 10px;
-            margin: 20px auto;
-            display: inline-block;
+        .final-result-layout { display: flex; flex-direction: row; justify-content: center; align-items: stretch; margin: 30px 0; gap: 30px; border: 1px solid #eee; padding: 30px 20px; border-radius: 12px; }
+        .result-left { flex: 1; border-right: 1px solid #eee; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px; }
+        .result-right { flex: 1.2; padding: 10px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 12px; }
+        .result-right p { margin: 0; font-size: 1.1em; color: #555; }
+        .result-highlight { color: #333; font-weight: bold; }
+        #result-acc { font-size: 4.5em; font-weight: bold; color: #4b8134; margin-top: 15px; }
+        .result-buttons { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 30px; flex-wrap: wrap; }
+
+        .popup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.4); z-index: 100; }
+        .popup-box { background-color: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); position: relative; width: 80%; max-width: 450px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .popup-box .close-btn { position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; color: #333; cursor: pointer; background: none; border: none; padding: 0; }
+        .result-popup #popup-main-message { font-size: 1.4em; font-weight: bold; margin-bottom: 0; line-height: 1.5; }
+        .correct { color: #28a745; } .incorrect { color: #dc3545; }
+        #popup-next-btn-modal { margin-top: 20px; }
+        
+        
+        #qr-popup { position:fixed; left:0; top:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); z-index:1000; }
+        
+        
+        #qr-box { background:white; padding:30px; border-radius:12px; text-align:center; }
+        #hof-list td { padding: 8px; border-bottom: 1px solid #eee; font-size: 1.1em; }
+        #hof-list tr:nth-child(1) td { color: #d4af37; font-weight: bold; }
+        #hof-list tr:nth-child(2) td { color: #a9a9a9; font-weight: bold; }
+        #hof-list tr:nth-child(3) td { color: #cd7f32; font-weight: bold; }
+
+        .footer { margin-top: 20px; font-size: 12px; color: #ccc; text-align: center; padding-bottom: 10px; }
+
+        @media (max-width: 900px) {
+            .main-layout { flex-direction: column; flex-wrap: nowrap; align-items: center; }
+            .left-panel, .right-panel { min-width: 90%; max-width: 90%; width: 100%; margin: 0 auto; }
+            .left-panel { flex-direction: column; gap: 10px; }
+            .right-panel { margin-top: 10px; }
+            .section { margin-top: 10px; padding: 15px; }
+            .option-row button { flex-grow: 1; }
+            .final-result-layout { flex-direction: column; }
+            .result-left { border-right: none; border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px; width: 100%; box-sizing: border-box;}
+            .result-right { width: 100%; box-sizing: border-box; }
+            .canvas-wrapper, .three-view-wrapper { width: 90%; max-width: 350px; margin-left: auto; margin-right: auto; }
+            #fold-control { width: 90%; max-width: 320px; }
+            .header-home-btn { position: static; display: inline-flex; align-self: flex-start; margin-bottom: 15px; }
         }
-
-        #net-canvas {
-            width:350px;
-            height:350px;
-            background:white;
-            border:2px solid #333;
-        }
-
-        #three-view {
-            width:350px;
-            height:350px;
-            background:#000;
-            margin:20px auto 0;
-            transform: translateZ(0);
-            will-change: transform;
-        }
-
-        #fold-control {
-            margin: 10px auto 20px;
-            padding: 10px 15px;
-            background: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            width: 320px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        #fold-slider { flex-grow: 1; }
-        #slider-value { width:40px; text-align:right; font-weight:bold; }
-
-        #qr-popup {
-            position:fixed;
-            left:0; top:0;
-            width:100%;
-            height:100%;
-            display:none;
-            align-items:center;
-            justify-content:center;
-            background:rgba(0,0,0,0.5);
-            z-index:1000;
-        }
-        #qr-box {
-            background:white;
-            padding:30px;
-            border-radius:12px;
-            text-align:center;
+        
+        .desktop-title, .desktop-home { display: inline; } .mobile-title, .mobile-home { display: none; }
+        @media (max-width: 480px) {
+            .container { padding: 15px; margin: 10px auto; }
+            h1 { font-size: 1.6em; margin-bottom: 15px; margin-top: 60px; }
+            h2 { font-size: 1.3em; }
+            #mode-select-page { padding-top: 20px; padding-bottom: 20px; }
+            .desktop-title { display: none; } .mobile-title { display: inline; }
+            .desktop-home { display: none; } .mobile-home { display: inline; }
+            #qr-btn { top: 10px; right: 10px; padding: 5px 10px; font-size: 14px; }
+            .home-button { padding: 5px 8px; }
+            .result-left, .result-right { padding: 10px; }
+            #result-acc { font-size: 3em; }
         }
     </style>
 </head>
 
 <body>
 
-<h1>입체도형 완전 정복 (정육면체)</h1>
-
-<button id="qr-btn" class="gray-btn" style="position:fixed; top:20px; right:20px;">
-    QR 코드
-</button>
-
 <div class="container">
+    <button id="qr-btn" class="secondary-btn" style="position:fixed; top:20px; right:20px;">QR 코드</button>
+    <h1><span class="desktop-title">정육면체 완전 정복</span><span class="mobile-title">정육면체 완전 정복</span></h1>
 
-    <!-- -------------------------------------- -->
-    <!-- 모드 선택 페이지 -->
-    <!-- -------------------------------------- -->
     <div id="mode-select-page">
         <h2>학습 모드를 선택하세요.</h2>
-        <div class="option-row">
-            <button class="green-btn" id="btn-mode-net">🧩 전개도 완성하기</button>
-            <button class="orange-btn" id="btn-mode-overlap">🎯 겹쳐지는 부분 찾기</button>
+        <div class="mode-buttons">
+            <div class="mode-option"><button class="primary-btn" id="btn-mode-net">📦 전개도 완성하기</button><small class="mode-description">빠진 면의 위치를 찾아서<br>올바른 전개도를 완성해 보세요.</small></div>
+            <div class="mode-option"><button class="orange-btn" id="btn-mode-overlap">🎯 겹쳐지는 부분 찾기</button><small class="mode-description">전개도를 접었을 때<br>어떤 부분이 서로 맞닿는지 찾아보세요.</small></div>
         </div>
     </div>
 
-    <!-- -------------------------------------- -->
-    <!-- 전개도 완성하기 설정 -->
-    <!-- -------------------------------------- -->
     <div id="setup-net" class="hidden">
-        <h2>전개도 완성하기 - 설정</h2>
-
-        <div class="section">
-            <h3>진행 방식</h3>
-            <div class="option-row" id="net-run-group">
-                <button data-run="practice" class="gray-btn">연습</button>
-                <button data-run="real" class="gray-btn">실전</button>
+        <button id="back-to-mode-select-btn" class="home-button header-home-btn"><span class="desktop-home">🏠 모드 선택으로</span><span class="mobile-home">🏠</span></button>
+        <h2 id="setup-title">전개도 완성하기 - 설정</h2>
+        <div class="main-layout">
+            <div class="left-panel">
+                <div class="section"><h3>난이도</h3><div class="option-row" id="net-run-group"><button data-run="practice" class="gray-btn selected">★</button><button data-run="real" class="gray-btn">★★</button></div></div>
+                <div class="section"><h3>문제 개수</h3><div id="quantity-control"><button id="net-q-minus">-</button><span id="net-q-display" class="quantity-display">5</span><button id="net-q-plus">+</button></div></div>
             </div>
+            <div class="right-panel"><div class="start-btn-container"><button id="start-net" class="primary-btn">시작!</button></div></div>
         </div>
-
-        <div class="section">
-            <h3>문제 개수</h3>
-            <div class="option-row">
-                <button class="gray-btn" id="net-q-minus">-</button>
-                <span id="net-q-display" style="font-size:22px;">10</span>
-                <button class="gray-btn" id="net-q-plus">+</button>
-            </div>
-        </div>
-
-        <button id="start-net" class="green-btn" style="margin-top:20px;">
-            문제 시작하기
-        </button>
     </div>
 
-    <!-- -------------------------------------- -->
-    <!-- 겹침 찾기 설정 -->
-    <!-- -------------------------------------- -->
     <div id="setup-overlap" class="hidden">
-        <h2>겹쳐지는 부분 찾기 - 설정</h2>
-
-        <div class="section">
-            <h3>겹침 유형</h3>
-            <div class="option-row" id="ov-type-group">
-                <button data-type="point" class="gray-btn">점</button>
-                <button data-type="edge" class="gray-btn">선분</button>
-                <button data-type="both" class="gray-btn">둘 다</button>
+        <button id="back-to-mode-select-btn-ov" class="home-button header-home-btn"><span class="desktop-home">🏠 모드 선택으로</span><span class="mobile-home">🏠</span></button>
+        <h2 id="setup-title-ov">겹쳐지는 부분 찾기 - 설정</h2>
+        <div class="main-layout">
+            <div class="left-panel">
+                <div class="section"><h3>문제 유형 선택</h3><div class="option-row" id="ov-type-group"><button data-type="point" class="gray-btn selected">점</button><button data-type="edge" class="gray-btn">선분</button><button data-type="both" class="gray-btn">둘 다</button></div></div>
+                <div class="section"><h3>난이도</h3><div class="option-row" id="ov-run-group"><button data-run="practice" class="gray-btn selected">★</button><button data-run="real" class="gray-btn">★★</button></div></div>
+            </div>
+            <div class="right-panel">
+                <div class="section"><h3>문제 개수</h3><div id="quantity-control"><button id="ov-q-minus">-</button><span id="ov-q-display" class="quantity-display">5</span><button id="ov-q-plus">+</button></div></div>
+                <div class="start-btn-container"><button id="start-overlap" class="primary-btn">시작!</button></div>
             </div>
         </div>
-
-        <div class="section">
-            <h3>진행 방식</h3>
-            <div class="option-row" id="ov-run-group">
-                <button data-run="practice" class="gray-btn">연습</button>
-                <button data-run="real" class="gray-btn">실전</button>
-            </div>
-        </div>
-
-        <div class="section">
-            <h3>문제 개수</h3>
-            <div class="option-row">
-                <button class="gray-btn" id="ov-q-minus">-</button>
-                <span id="ov-q-display" style="font-size:22px;">10</span>
-                <button class="gray-btn" id="ov-q-plus">+</button>
-            </div>
-        </div>
-
-        <button id="start-overlap" class="orange-btn" style="margin-top:20px;">
-            문제 시작하기
-        </button>
     </div>
 
-    <!-- -------------------------------------- -->
-    <!-- 문제 페이지 -->
-    <!-- -------------------------------------- -->
     <div id="problem-page" class="hidden">
-        <h2 id="problem-title">문제</h2>
-
-        <div class="canvas-wrapper">
-            <canvas id="net-canvas" width="350" height="350"></canvas>
+        <div class="problem-header">
+            <button class="home-button" id="btn-exit"><span class="desktop-home">🏠 종료</span><span class="mobile-home">🏠</span></button>
+            <h2 id="problem-title">문제 1/10</h2>
         </div>
-
-        <canvas id="three-view" width="350" height="350"></canvas>
-
-        <div id="fold-control">
-            <span>펼침 (0)</span>
-            <input type="range" id="fold-slider" min="0" max="1" step="0.01" value="0">
-            <span>(1) 접힘</span>
-            <span id="slider-value">0.00</span>
+        <div class="main-layout" style="margin-top: 20px;">
+            <div class="canvas-wrapper"><canvas id="net-canvas" width="350" height="350"></canvas></div>
+            <div class="three-view-wrapper"><canvas id="three-view" width="350" height="350"></canvas><div id="fold-control" class="hidden"><span class="slider-label">펴기</span><input type="range" id="fold-slider" min="0" max="1" step="0.01" value="0"><span class="slider-label">접기</span></div></div>
         </div>
-
-        <div class="option-row" style="margin-top:20px;">
-            <button id="btn-check" class="green-btn">정답 확인</button>
-            <button id="btn-next" class="orange-btn hidden">다음 문제</button>
-            <button id="btn-exit" class="red-btn">종료</button>
+        <div class="problem-footer">
+            <div id="check-answer-container">
+                <button id="btn-check" class="primary-btn"><span class="progress-bar"></span><span class="button-text">정답 확인하기</span></button>
+                <button id="btn-next" class="primary-btn hidden">다음 문제 도전하기</button>
+                <small class="check-answer-guide">꾹 누르고 있으면 채점됩니다!</small>
+            </div>
         </div>
     </div>
 
-    <!-- -------------------------------------- -->
-    <!-- 결과 페이지 -->
-    <!-- -------------------------------------- -->
     <div id="result-page" class="hidden">
-        <h2>학습 결과</h2>
-        <p>정답률: <span id="result-acc"></span></p>
-
-        <button id="btn-restart" class="green-btn" style="margin-top:20px;">
-            처음으로 돌아가기
-        </button>
+        <h2 id="final-result-title">학습 결과</h2>
+        <div class="final-result-layout">
+            <div class="result-left">
+                <p>나의 정확도</p>
+                <div id="result-acc">0%</div>
+            </div>
+            
+            <div class="result-right">
+                <p>총 문제 수: <span id="res-total" class="result-highlight">0</span>개</p>
+                <p>한 번에 맞춘 문제: <span id="res-first" class="result-highlight">0</span>개</p>
+                <p>다시 도전해 맞춘 문제: <span id="res-retry" class="result-highlight">0</span>개</p>
+                <div id="res-score-area"></div> </div>
+        </div>
+        
+        <div class="result-buttons">
+            <button id="btn-restart" class="primary-btn">새로운 학습 시작하기</button>
+            </div>
     </div>
 
 </div>
 
-<!-- -------------------------------------- -->
-<!-- QR 팝업 -->
-<!-- -------------------------------------- -->
-<div id="qr-popup">
-    <div id="qr-box">
-        <h3>QR 코드</h3>
-        <div id="qr-holder"></div>
-        <button id="qr-close" class="gray-btn" style="margin-top:20px;">닫기</button>
-    </div>
-</div>
+<div class="footer">Copyright © 2025 휴르쌤. All rights reserved.</div>
 
-<!-- ---------------- Babylon + JS Modules ---------------- -->
+<div id="result-popup-overlay" class="popup-overlay hidden"><div class="result-popup popup-box"><button class="close-btn" id="popup-close-btn">&times;</button><div class="popup-content"><p id="popup-main-message" class="correct"></p><button id="popup-next-btn-modal" class="primary-btn">다음 문제 도전하기</button></div></div></div>
+<div id="hof-popup-overlay" class="popup-overlay hidden"><div class="popup-box" style="max-width: 500px;"><button class="close-btn" id="hof-close-btn">&times;</button><h3 style="color:#4b8134;">🏆 명예의 전당 🏆</h3><p style="font-size:0.9em; color:#666; margin-top:-10px;">오늘의 '겹쳐지는 부분 찾기' 고수는?</p><div id="hof-top-scorer" style="background:#fff3cd; padding:10px; border-radius:8px; margin-bottom:15px; width:100%; box-sizing:border-box; display:none;"><strong>👑 역대 최고 득점 👑</strong><br><span id="top-scorer-info" style="font-size:1.2em; color:#d63384;"></span></div><div class="hof-input-group" style="margin: 20px 0;"><input type="text" id="hof-initial" placeholder="AAA" maxlength="3" style="padding:8px; width:80px; text-align:center; text-transform:uppercase; font-size:1.2em; border:2px solid #ddd; border-radius:6px;"><button id="hof-submit-btn" class="primary-btn" style="padding:8px 15px;">등록</button></div><div id="hof-message" style="margin-bottom:10px; font-size:0.9em;"></div><div style="width:100%; max-height:250px; overflow-y:auto; border-top:1px solid #eee;"><table style="width:100%; border-collapse:collapse; margin-top:10px;"><thead><tr style="background:#f9f9f9; border-bottom:2px solid #ddd;"><th style="padding:8px;">순위</th><th>이니셜</th><th>점수</th></tr></thead><tbody id="hof-list"></tbody></table></div></div></div>
 
-<!-- Babylon -->
+<div id="qr-popup" class="hidden"><div id="qr-box"><h3>QR 코드</h3><div id="qr-holder"></div><button id="qr-close" class="secondary-btn" style="margin-top:20px;">닫기</button></div></div>
+
 <script src="https://cdn.babylonjs.com/babylon.max.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
-
-<!-- 우리 스크립트들 (순서 매우 중요!!) -->
-<script src="./js/cube_nets.js"></script>
-<script src="./js/main.js"></script>      <!-- ⭐ 먼저 로드 -->
-<script src="./js/ui.js"></script>        <!-- ⭐ 그 다음에 로드 -->
-<script src="./js/validator.js"></script>
-<script src="./js/overlap.js"></script>
-<script src="./js/foldEngine.js"></script>  <!-- foldEngine은 마지막 -->
-
+<script src="./js/bundle.js"></script>
 <script>
-document.getElementById("fold-slider").addEventListener("input", (e) => {
-    const v = Number(e.target.value);
-    FoldEngine.setFoldProgress?.(v);
-    document.getElementById("slider-value").textContent = v.toFixed(2);
-});
+    const slider = document.getElementById("fold-slider");
+    if (slider) { slider.addEventListener("input", (e) => { const v = Number(e.target.value); if (typeof FoldEngine !== "undefined" && FoldEngine.setFoldProgress) { FoldEngine.setFoldProgress(v); } }); }
+    
+    document.addEventListener("DOMContentLoaded", () => {
+        const modalCloseBtn = document.getElementById('popup-close-btn');
+        if(modalCloseBtn && window.CubeProject && window.CubeProject.closePopup) { modalCloseBtn.onclick = window.CubeProject.closePopup; }
+        const modalNextBtn = document.getElementById('popup-next-btn-modal');
+        if(modalNextBtn && window.CubeProject && window.CubeProject.nextProblem) { modalNextBtn.onclick = window.CubeProject.nextProblem; }
+        
+        
+        const btnQR = document.getElementById("qr-btn"), 
+              popup = document.getElementById("qr-popup"), 
+              holder = document.getElementById("qr-holder"), 
+              qrClose = document.getElementById("qr-close");
+              
+        if (btnQR && popup && holder && qrClose) {
+            btnQR.onclick = () => { 
+                
+                popup.classList.remove("hidden");
+                popup.style.display = "flex"; 
+                
+                holder.innerHTML = ""; 
+                const currentUrl = window.location.href.split('?')[0];
+                
+                
+                if(typeof QRCode !== 'undefined') { 
+                    new QRCode(holder, { text: currentUrl, width: 180, height: 180 }); 
+                } else { 
+                    holder.innerHTML = "<p>QR 라이브러리 로드 실패</p>"; 
+                }
+            };
+            qrClose.onclick = () => {
+                
+                popup.classList.add("hidden");
+                popup.style.display = "none";
+            };
+        }
+    });
 </script>
-
 </body>
 </html>

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>정육면체 완전 정복</title>
     <meta property="og:title" content="정육면체 완전 정복">
-    <meta property="og:description" content="전개도 완성하기 / 겹쳐지는 부분 찾기 문제 자동 생성">
+    <meta property="og:description" content="전개도 완성하기 / 만나는 부분 찾기 문제 자동 생성">
     <meta name="description" content="Educational Web App for Elementary School Learning | Education / School / Study / Quiz / Learning Activity for Students" />
     <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
     
@@ -148,7 +148,7 @@
         <h2>학습 모드를 선택하세요.</h2>
         <div class="mode-buttons">
             <div class="mode-option"><button class="primary-btn" id="btn-mode-net">📦 전개도 완성하기</button><small class="mode-description">빠진 면의 위치를 찾아서<br>올바른 전개도를 완성해 보세요.</small></div>
-            <div class="mode-option"><button class="orange-btn" id="btn-mode-overlap">🎯 겹쳐지는 부분 찾기</button><small class="mode-description">전개도를 접었을 때<br>어떤 부분이 서로 맞닿는지 찾아보세요.</small></div>
+            <div class="mode-option"><button class="orange-btn" id="btn-mode-overlap">🎯 만나는 부분 찾기</button><small class="mode-description">전개도를 접었을 때<br>어떤 부분이 서로 맞닿는지 찾아보세요.</small></div>
         </div>
     </div>
 
@@ -166,7 +166,7 @@
 
     <div id="setup-overlap" class="hidden">
         <button id="back-to-mode-select-btn-ov" class="home-button header-home-btn"><span class="desktop-home">🏠 모드 선택으로</span><span class="mobile-home">🏠</span></button>
-        <h2 id="setup-title-ov">겹쳐지는 부분 찾기 - 설정</h2>
+        <h2 id="setup-title-ov">만나는 부분 찾기 - 설정</h2>
         <div class="main-layout">
             <div class="left-panel">
                 <div class="section"><h3>문제 유형 선택</h3><div class="option-row" id="ov-type-group"><button data-type="point" class="gray-btn selected">점</button><button data-type="edge" class="gray-btn">선분</button><button data-type="both" class="gray-btn">둘 다</button></div></div>
@@ -222,7 +222,7 @@
 <div class="footer">Copyright © 2025 휴르쌤. All rights reserved.</div>
 
 <div id="result-popup-overlay" class="popup-overlay hidden"><div class="result-popup popup-box"><button class="close-btn" id="popup-close-btn">&times;</button><div class="popup-content"><p id="popup-main-message" class="correct"></p><button id="popup-next-btn-modal" class="primary-btn">다음 문제 도전하기</button></div></div></div>
-<div id="hof-popup-overlay" class="popup-overlay hidden"><div class="popup-box" style="max-width: 500px;"><button class="close-btn" id="hof-close-btn">&times;</button><h3 style="color:#4b8134;">🏆 명예의 전당 🏆</h3><p style="font-size:0.9em; color:#666; margin-top:-10px;">오늘의 '겹쳐지는 부분 찾기' 고수는?</p><div id="hof-top-scorer" style="background:#fff3cd; padding:10px; border-radius:8px; margin-bottom:15px; width:100%; box-sizing:border-box; display:none;"><strong>👑 역대 최고 득점 👑</strong><br><span id="top-scorer-info" style="font-size:1.2em; color:#d63384;"></span></div><div class="hof-input-group" style="margin: 20px 0;"><input type="text" id="hof-initial" placeholder="AAA" maxlength="3" style="padding:8px; width:80px; text-align:center; text-transform:uppercase; font-size:1.2em; border:2px solid #ddd; border-radius:6px;"><button id="hof-submit-btn" class="primary-btn" style="padding:8px 15px;">등록</button></div><div id="hof-message" style="margin-bottom:10px; font-size:0.9em;"></div><div style="width:100%; max-height:250px; overflow-y:auto; border-top:1px solid #eee;"><table style="width:100%; border-collapse:collapse; margin-top:10px;"><thead><tr style="background:#f9f9f9; border-bottom:2px solid #ddd;"><th style="padding:8px;">순위</th><th>이니셜</th><th>점수</th></tr></thead><tbody id="hof-list"></tbody></table></div></div></div>
+<div id="hof-popup-overlay" class="popup-overlay hidden"><div class="popup-box" style="max-width: 500px;"><button class="close-btn" id="hof-close-btn">&times;</button><h3 style="color:#4b8134;">🏆 명예의 전당 🏆</h3><p style="font-size:0.9em; color:#666; margin-top:-10px;">오늘의 '만나는 부분 찾기' 고수는?</p><div id="hof-top-scorer" style="background:#fff3cd; padding:10px; border-radius:8px; margin-bottom:15px; width:100%; box-sizing:border-box; display:none;"><strong>👑 역대 최고 득점 👑</strong><br><span id="top-scorer-info" style="font-size:1.2em; color:#d63384;"></span></div><div class="hof-input-group" style="margin: 20px 0;"><input type="text" id="hof-initial" placeholder="AAA" maxlength="3" style="padding:8px; width:80px; text-align:center; text-transform:uppercase; font-size:1.2em; border:2px solid #ddd; border-radius:6px;"><button id="hof-submit-btn" class="primary-btn" style="padding:8px 15px;">등록</button></div><div id="hof-message" style="margin-bottom:10px; font-size:0.9em;"></div><div style="width:100%; max-height:250px; overflow-y:auto; border-top:1px solid #eee;"><table style="width:100%; border-collapse:collapse; margin-top:10px;"><thead><tr style="background:#f9f9f9; border-bottom:2px solid #ddd;"><th style="padding:8px;">순위</th><th>이니셜</th><th>점수</th></tr></thead><tbody id="hof-list"></tbody></table></div></div></div>
 
 <div id="qr-popup" class="hidden"><div id="qr-box"><h3>QR 코드</h3><div id="qr-holder"></div><button id="qr-close" class="secondary-btn" style="margin-top:20px;">닫기</button></div></div>
 

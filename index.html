@@ -52,23 +52,60 @@
         .header-home-btn { position: absolute; top: 20px; left: 20px; z-index: 10; }
         .home-button { background-color: #e9e9e9; color: #333; border-radius: 8px; padding: 8px 12px; font-size: 14px; display: flex; align-items: center; gap: 5px; cursor: pointer; text-decoration: none; }
         #problem-title { flex-grow: 1; text-align: center; margin: 0; font-size: 1.5em; }
-        .canvas-wrapper, .three-view-wrapper { max-width: 350px; max-height: 350px; aspect-ratio: 1 / 1; background: #f0f0f0; border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin: 20px auto; width: 100%; box-sizing: border-box; aspect-ratio: 1 / 1; display: block; }
         
-        /* 👇 [수정] 캔버스 스타일: 모바일 터치 오류(스크롤, 줌, 하이라이트) 방지 코드 추가 */
+        /* 👇 [수정됨] 상자(Wrapper) 스타일: 높이 제한 해제 및 Flex 적용 */
+        .canvas-wrapper, .three-view-wrapper { 
+            max-width: 350px; 
+            /* max-height: 350px;  <-- 삭제: 높이 제한 제거 */
+            /* aspect-ratio: 1 / 1; <-- 삭제: 상자 비율 고정 제거 */
+            width: 100%; 
+            height: auto; /* 내용물에 따라 늘어남 */
+            
+            background: #f0f0f0; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            padding: 10px; 
+            margin: 20px auto; 
+            box-sizing: border-box; 
+            
+            display: flex; /* 내부 정렬 */
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* 👇 [수정됨] 캔버스 스타일: 비율 고정(aspect-ratio)을 여기로 이동 */
         #net-canvas, #three-view { 
-            width:100%; height:100%; 
-            background:white; 
-            border:2px solid #333; 
+            width: 100%; 
+            height: auto; /* 부모 높이 대신 자동 */
+            aspect-ratio: 1 / 1; /* ⭐ 캔버스를 정사각형으로 고정 */
+            
+            background: white; 
+            border: 2px solid #333; 
             box-sizing: border-box;
             
-            /* 모바일 터치 밀림 방지 핵심 코드 */
             touch-action: none; 
             -webkit-tap-highlight-color: transparent;
             outline: none;
         }
         
         #three-view { background:#000; margin: 0; transform: translateZ(0); will-change: transform; }
-        #fold-control { margin: 10px auto 20px; padding: 10px 20px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; max-width: 350px; width: 90%; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+        
+        /* 👇 [수정됨] 슬라이더 스타일: 위치 안정화 */
+        #fold-control { 
+            margin: 15px 0 5px 0; /* 상하 여백 조정 */
+            padding: 10px 20px; 
+            background: #f9f9f9; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            width: 100%; /* 상자 너비에 맞춤 */
+            max-width: 100%;
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            gap: 15px; 
+            box-sizing: border-box;
+        }
+
         .slider-label { font-size: 15px; font-weight: bold; color: #555; white-space: nowrap; }
         #fold-slider { flex-grow: 1; cursor: pointer; }
         .problem-footer { display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 30px; padding-bottom: 20px; clear: both; }
@@ -95,9 +132,7 @@
         .correct { color: #28a745; } .incorrect { color: #dc3545; }
         #popup-next-btn-modal { margin-top: 20px; }
         
-        
         #qr-popup { position:fixed; left:0; top:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); z-index:1000; }
-        
         
         #qr-box { background:white; padding:30px; border-radius:12px; text-align:center; }
         #hof-list td { padding: 8px; border-bottom: 1px solid #eee; font-size: 1.1em; }
@@ -117,8 +152,19 @@
             .final-result-layout { flex-direction: column; }
             .result-left { border-right: none; border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px; width: 100%; box-sizing: border-box;}
             .result-right { width: 100%; box-sizing: border-box; }
-            .canvas-wrapper, .three-view-wrapper { width: 90%; max-width: 350px; margin-left: auto; margin-right: auto; }
-            #fold-control { width: 90%; max-width: 320px; }
+            
+            /* 👇 [수정됨] 모바일 레이아웃 보정 */
+            .canvas-wrapper, .three-view-wrapper { 
+                width: 90%; 
+                max-width: 350px; 
+                margin-left: auto; 
+                margin-right: auto; 
+                aspect-ratio: auto; /* 상자 비율 해제 */
+            }
+            #fold-control { 
+                width: 100%; 
+                max-width: 100%; 
+            }
             .header-home-btn { position: static; display: inline-flex; align-self: flex-start; margin-bottom: 15px; }
         }
         
